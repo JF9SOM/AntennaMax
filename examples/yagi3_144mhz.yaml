@@ -1,0 +1,17 @@
+# 3-element Yagi for 144 MHz (free space).
+# PROVISIONAL dimensions, not from a published design; boom correction is not applied.
+# Elements are parallel to the y axis, spaced along x; the beam points to +x (directors).
+template: yagi
+params:
+  center_frequency_mhz: 144
+  feed_index: 1          # 0-based: the second element is driven
+  elements:
+    - {position_mm: 0,   length_mm: 1030, diameter_mm: 6}   # reflector
+    - {position_mm: 300, length_mm: 980,  diameter_mm: 6}   # driven element
+    - {position_mm: 600, length_mm: 920,  diameter_mm: 6}   # director
+sweep:
+  start_mhz: 142
+  stop_mhz: 146
+  points: 5
+pattern:
+  resolution_deg: 10

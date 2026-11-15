@@ -1,0 +1,11 @@
+# 145 MHz half-wave dipole (free space). Length defaults to the resonance estimate.
+template: dipole
+params:
+  center_frequency_mhz: 145
+  diameter_mm: 4
+sweep:
+  start_mhz: 140
+  stop_mhz: 150
+  points: 11
+pattern:
+  resolution_deg: 10

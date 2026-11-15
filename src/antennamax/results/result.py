@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -85,3 +87,37 @@ class Result:
         back = self.gain_dbi[f, n_theta - 1 - it, (ip + n_phi // 2) % n_phi]
         with np.errstate(invalid="ignore"):
             return self.gain_dbi[f, it, ip] - back
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-serialisable form. Non-finite values (inf SWR, -inf gain nulls, inf F/B)
+        become None because JSON has no infinity."""
+        d: dict[str, Any] = {
+            "frequencies_hz": self.frequencies_hz.tolist(),
+            "z0": self.z0,
+            "impedance_real": self.impedance.real.tolist(),
+            "impedance_imag": self.impedance.imag.tolist(),
+            "swr": _json_safe(self.swr),
+            "theta_rad": None,
+            "phi_rad": None,
+            "gain_dbi": None,
+            "max_gain_dbi": None,
+            "front_to_back_db": None,
+        }
+        if self.gain_dbi is not None:
+            d["theta_rad"] = self.theta_rad.tolist()
+            d["phi_rad"] = self.phi_rad.tolist()
+            d["gain_dbi"] = _json_safe(self.gain_dbi)
+            d["max_gain_dbi"] = _json_safe(self.max_gain_dbi)
+            d["front_to_back_db"] = _json_safe(self.front_to_back_db)
+        return d
+
+
+def _json_safe(a: NDArray[np.float64]) -> Any:
+    """Nested lists with non-finite values replaced by None."""
+    return _nan_to_none(a.tolist())
+
+
+def _nan_to_none(x: Any) -> Any:
+    if isinstance(x, list):
+        return [_nan_to_none(v) for v in x]
+    return x if math.isfinite(x) else None
