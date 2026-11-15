@@ -45,9 +45,13 @@ dev = [
     { name = "ruff" },
 ]
 gui = [
+    { name = "matplotlib" },
     { name = "pyside6" },
     { name = "pyvista" },
     { name = "pyvistaqt" },
+]
+plot = [
+    { name = "matplotlib" },
 ]
 rf = [
     { name = "scikit-rf" },
@@ -56,6 +60,8 @@ rf = [
 [package.metadata]
 requires-dist = [
     { name = "build123d", marker = "extra == 'cad'", specifier = ">=0.9" },
+    { name = "matplotlib", marker = "extra == 'gui'", specifier = ">=3.8" },
+    { name = "matplotlib", marker = "extra == 'plot'", specifier = ">=3.8" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pydantic", specifier = ">=2.5" },
     { name = "pynec", specifier = ">=2.4" },
@@ -68,7 +74,7 @@ requires-dist = [
     { name = "scikit-rf", marker = "extra == 'rf'", specifier = ">=1.0" },
     { name = "scipy", specifier = ">=1.11" },
 ]
-provides-extras = ["rf", "cad", "gui", "dev"]
+provides-extras = ["rf", "cad", "plot", "gui", "dev"]
 
 [[package]]
 name = "anytree"

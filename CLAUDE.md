@@ -29,7 +29,9 @@ MMANA に代わる、現代的な Python スタックによるアマチュア無
 | 設計ファイル | pydantic + PyYAML | `design.yaml` のスキーマ検証 |
 | RF データ | scikit-rf | Touchstone 入出力, Smith チャート |
 | 3D CAD | build123d (OCP) | extras `cad` |
-| GUI | PySide6 + pyvista / pyvistaqt | extras `gui`。P4 まで着手しない |
+| プロット | matplotlib | extras `plot`(`gui` にも含む)。`antennamax plot` |
+| 3D 表示 | pyvista | extras `gui`。`antennamax view`(確認用表示) |
+| GUI | PySide6 + pyvistaqt | extras `gui`。GUI アプリは P4 まで着手しない |
 | 最適化 | scipy.optimize(必要なら optuna) | |
 | テスト / Lint | pytest, ruff | |
 
@@ -46,6 +48,7 @@ src/antennamax/
   io/          .nec 入出力, Touchstone(MMANA .maa 読込は将来の移行支援、優先度低)
   optimize/
   cli/
+  viz/         描画データ生成(NumPy のみ), view(pyvista)/plot(matplotlib)
   gui/         (P4)
 designs/       コミュニティ設計の蓄積(design.yaml が唯一のソース)
 tests/
@@ -117,7 +120,7 @@ uv run antennamax --help          # CLI
 
 ## 現在のフェーズ
 
-**P0**(`docs/ROADMAP.md` 参照)。GUI・openEMS・PO には着手しない。
+**P0**(`docs/ROADMAP.md` 参照)。確認用表示(view/plot)は実装済み。PySide6 の GUI アプリ・openEMS・PO には着手しない(GUI アプリは P4)。
 
 ## ライセンス
 

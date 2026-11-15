@@ -13,6 +13,7 @@ from antennamax.core.units import hz_to_mhz
 from antennamax.io.design import DesignError, load_design
 from antennamax.results.result import Result
 from antennamax.solvers.nec2 import Nec2Solver
+from antennamax.viz import MissingExtraError
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -22,6 +23,16 @@ def _build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="simulate a design.yaml")
     run.add_argument("design", type=Path, help="path to design.yaml")
     run.add_argument("--json", action="store_true", help="print the Result as JSON")
+
+    view = sub.add_parser("view", help="3D view of the wires and radiation pattern (pyvista)")
+    view.add_argument("design", type=Path, help="path to design.yaml")
+    view.add_argument(
+        "--screenshot", type=Path, help="render off-screen to this PNG instead of opening a window"
+    )
+
+    plot = sub.add_parser("plot", help="SWR, R/X and pattern cuts in one figure (matplotlib)")
+    plot.add_argument("design", type=Path, help="path to design.yaml")
+    plot.add_argument("--save", type=Path, help="write a PNG instead of opening a window")
     return parser
 
 
@@ -61,10 +72,46 @@ def _run(design_path: Path, as_json: bool) -> int:
     return 0
 
 
+def _simulate_for_viewer(design_path: Path):
+    """Load the design and run the calculations the viewers need."""
+    from antennamax.viz.data import simulate
+
+    return simulate(load_design(design_path))
+
+
+def _view(design_path: Path, screenshot: Path | None) -> int:
+    from antennamax.viz import view3d
+
+    view3d.require("pyvista", "open the 3D view", extra="gui")  # fail fast, before the simulation
+    view3d.show(_simulate_for_viewer(design_path), screenshot)
+    return 0
+
+
+def _plot(design_path: Path, save: Path | None) -> int:
+    from antennamax.viz import plot2d
+
+    plot2d.require("matplotlib", "draw the summary plot", extra="plot")
+    run = _simulate_for_viewer(design_path)
+    if save is not None:
+        plot2d.save(run, save)
+        print(f"saved {save}")
+    else:
+        plot2d.show(run)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    if args.command == "run":
-        return _run(args.design, args.json)
+    try:
+        if args.command == "run":
+            return _run(args.design, args.json)
+        if args.command == "view":
+            return _view(args.design, args.screenshot)
+        if args.command == "plot":
+            return _plot(args.design, args.save)
+    except (DesignError, MissingExtraError) as exc:
+        print(f"antennamax: error: {exc}", file=sys.stderr)
+        return 2
     return 2  # unreachable: subcommand is required
 
 
