@@ -75,6 +75,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--mast-diameter-mm", type=float, help="mast outer diameter in mm (default: VP20, 26 mm)"
     )
     parts.add_argument(
+        "--support",
+        choices=("auto", "integrated", "hub-rod"),
+        default="auto",
+        help="support style: one-piece spreaders, hubs with rods, or choose by build volume",
+    )
+    parts.add_argument(
+        "--rod-diameter-mm", type=float, help="rod diameter for hub-rod supports (default 8)"
+    )
+    parts.add_argument("--rod-insert-depth-mm", type=float, help="rod insertion depth (default 20)")
+    parts.add_argument(
         "--build-volume-mm",
         type=float,
         nargs=3,
@@ -173,17 +183,13 @@ def _eprint(message: str) -> None:
         print(message.encode("ascii", "replace").decode("ascii"), file=sys.stderr)
 
 
-def _parts(
-    design_path: Path,
-    out_dir: Path,
-    clearance_mm: float,
-    mast_mm: float | None,
-    build_volume_mm: list[float] | None,
-) -> int:
-    from antennamax.mech.base import require_cad, to_mm
-    from antennamax.mech.qfh_parts import QfhPartSet
+def _parts(args: argparse.Namespace) -> int:
+    from pydantic import ValidationError
 
-    design = load_design(design_path)
+    from antennamax.mech.base import require_cad, to_mm
+    from antennamax.mech.qfh_support import plan_supports
+
+    design = load_design(args.design)
     if design.template_name != "qfh":
         _eprint(
             f"antennamax: error: 部品未対応 (no printable parts for template "
@@ -191,36 +197,64 @@ def _parts(
         )
         return 2
     require_cad()  # fail early with the install hint
-    settings: dict = {"clearance_mm": clearance_mm}
-    if build_volume_mm is not None:
-        settings["build_volume_m"] = tuple(v / 1000.0 for v in build_volume_mm)
-    params: dict = {"qfh": design.template, "print_settings": settings}
-    if mast_mm is not None:
-        params["mast_outer_diameter_mm"] = mast_mm
-    part_set = QfhPartSet.model_validate(params)
+    settings: dict = {"clearance_mm": args.clearance_mm}
+    if args.build_volume_mm is not None:
+        settings["build_volume_m"] = tuple(v / 1000.0 for v in args.build_volume_mm)
+
+    def metres(value_mm: float | None) -> float | None:
+        return None if value_mm is None else value_mm / 1000.0
+
+    try:
+        plan = plan_supports(
+            design.template,
+            args.support,
+            print_settings=settings,
+            mast_outer_diameter_m=metres(args.mast_diameter_mm),
+            rod_diameter_m=metres(args.rod_diameter_mm),
+            rod_insert_depth_m=metres(args.rod_insert_depth_mm),
+        )
+    except ValidationError as exc:
+        _eprint(
+            f"antennamax: error: cannot build the {args.support} supports: {exc.errors()[0]['msg']}"
+        )
+        return 2
+    part_set = plan.part_set
 
     rows = []
     for instance in part_set.instances():
-        instance.part.export(out_dir)
-        size = instance.part.size_mm()
-        rows.append((instance, size))
-        problem = part_set.print_settings.check_fit(instance.name, size)
-        if problem is not None:
-            _eprint(f"antennamax: warning: {problem.message()}")
+        instance.part.export(args.out)
+        rows.append((instance, instance.part.size_mm()))
+    for problem in part_set.fit_problems():
+        _eprint(f"antennamax: warning: {problem.message()}")
 
+    print(f"Support: {plan.mode} ({plan.reason})")
     print(f"{'Part':<26} {'Qty':>3} {'From top[mm]':>13}   Size x y z [mm]")
     for instance, (x, y, z) in rows:
         top = to_mm(instance.distance_from_top_m)
         print(f"{instance.name:<26} {instance.count:>3} {top:>13.1f}   {x:.1f} x {y:.1f} x {z:.1f}")
-    fastener = part_set.fastener
-    min_length = to_mm(part_set.min_screw_length_m)
+    rods = part_set.rods()
+    if rods:
+        print(f"Rods (not printed, {to_mm(rods[0].diameter_m):g} mm diameter):")
+        for rod in rods:
+            print(
+                f"  {rod.name:<24} {rod.count:>3} x {to_mm(rod.length_m):.1f} mm "
+                f"= {to_mm(rod.total_length_m):.1f} mm"
+            )
+        total = sum(rod.total_length_m for rod in rods)
+        print(f"  total rod length {to_mm(total):.1f} mm")
+    name = part_set.fastener.name
+    print("Fasteners:")
+    for use in part_set.fasteners():
+        print(
+            f"  {use.purpose}: {use.screws} x {name} screws "
+            f"(length >= {to_mm(use.min_length_m):.1f} mm, use {use.screw_length_mm} mm), "
+            f"{use.nuts} x {name} hex nuts"
+        )
     print(
-        f"Fasteners: {part_set.screw_count} x {fastener.name} screws "
-        f"(length >= {min_length:.1f} mm, use {part_set.screw_length_mm} mm), "
-        f"{part_set.nut_count} x {fastener.name} hex nuts"
+        f"  total: {part_set.screw_count} x {name} screws, {part_set.nut_count} x {name} hex nuts"
     )
     for instance, _ in rows:
-        for path in (out_dir / f"{instance.name}.stl", out_dir / f"{instance.name}.step"):
+        for path in (args.out / f"{instance.name}.stl", args.out / f"{instance.name}.step"):
             print(f"wrote {path}")
     return 0
 
@@ -235,13 +269,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "plot":
             return _plot(args.design, args.save)
         if args.command == "parts":
-            return _parts(
-                args.design,
-                args.out,
-                args.clearance_mm,
-                args.mast_diameter_mm,
-                args.build_volume_mm,
-            )
+            return _parts(args)
     except (DesignError, SegmentationError, MissingExtraError) as exc:
         print(f"antennamax: error: {exc}", file=sys.stderr)
         return 2

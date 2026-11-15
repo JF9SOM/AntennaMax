@@ -389,7 +389,8 @@ def test_cli_parts_435mhz_lists_parts_without_warnings(tmp_path, capsys):
 
 def test_cli_parts_137mhz_warns_which_parts_exceed_the_build_volume(tmp_path, capsys):
     need_cad()
-    assert main(["parts", str(EXAMPLES / "qfh_137mhz.yaml"), "--out", str(tmp_path)]) == 0
+    design = str(EXAMPLES / "qfh_137mhz.yaml")
+    assert main(["parts", design, "--out", str(tmp_path), "--support", "integrated"]) == 0
     err = capsys.readouterr().err
     assert err.count("antennamax: warning: part") == 3
     assert "'qfh_upper_spreader'" in err and "length +69.7 mm" in err

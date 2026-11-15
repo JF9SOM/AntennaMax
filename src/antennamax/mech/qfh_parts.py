@@ -37,7 +37,7 @@ from typing import Any, Literal
 
 from pydantic import PositiveFloat, model_validator
 
-from antennamax.mech.base import Part, require_cad, to_mm
+from antennamax.mech.base import FitProblem, Part, require_cad, to_mm
 from antennamax.mech.fasteners import Fastener, standard_screw_length_mm
 from antennamax.templates.base import SIModel
 from antennamax.templates.qfh import Qfh
@@ -66,8 +66,8 @@ class QfhHolderParams(SIModel):
     fastener: Fastener = Fastener()
 
 
-class QfhHolderPart(QfhHolderParams, Part):
-    """Derived dimensions shared by the parts (metres unless a name ends in _mm)."""
+class QfhSupportPart(QfhHolderParams, Part):
+    """Derived dimensions shared by all support parts (metres unless a name ends in _mm)."""
 
     # --- fasteners and grooves ---------------------------------------------------------
 
@@ -123,17 +123,29 @@ class QfhHolderPart(QfhHolderParams, Part):
     def mast_hole_diameter_m(self) -> float:
         return self.print_settings.hole_diameter_m(self.mast_outer_diameter_m)
 
+    @model_validator(mode="after")
+    def _check_arm_width(self) -> QfhSupportPart:
+        if self.resolved_arm_width_m < self.min_arm_width_m - 1e-12:
+            raise ValueError(
+                f"arm_width_m must be at least {to_mm(self.min_arm_width_m):.1f} mm for the screws"
+            )
+        return self
+
+    def loop_half_length_m(self, loop: Loop) -> float:
+        """Dc/2: how far from the centre the groove and the clamp reach."""
+        dims = self.qfh.dimensions
+        return (dims.large if loop == "large" else dims.small).compensated_horizontal_m / 2.0
+
+
+class QfhHolderPart(QfhSupportPart):
+    """Integrated spreaders: the hub, the arms and the groove are one printed part."""
+
     @property
     def hub_diameter_m(self) -> float:
         wall = self.hub_wall_m or 4.0 * self.wall_m
         return self.mast_hole_diameter_m + 2.0 * wall
 
     # --- along the arms --------------------------------------------------------------------
-
-    def loop_half_length_m(self, loop: Loop) -> float:
-        """Dc/2: how far from the centre the groove and the clamp reach."""
-        dims = self.qfh.dimensions
-        return (dims.large if loop == "large" else dims.small).compensated_horizontal_m / 2.0
 
     def clamp_length_m(self, loop: Loop) -> float:
         """From the edge of the hub to Dc/2."""
@@ -145,10 +157,6 @@ class QfhHolderPart(QfhHolderParams, Part):
 
     @model_validator(mode="after")
     def _check(self) -> QfhHolderPart:
-        if self.resolved_arm_width_m < self.min_arm_width_m - 1e-12:
-            raise ValueError(
-                f"arm_width_m must be at least {to_mm(self.min_arm_width_m):.1f} mm for the screws"
-            )
         needed = 2.0 * self.nut_pocket_circumradius_m + 2.0 * self.wall_m
         for loop in ("large", "small"):
             available = self.clamp_length_m(loop)
@@ -281,6 +289,37 @@ class QfhClamp(QfhHolderPart):
 
 
 @dataclass(frozen=True)
+class Rod:
+    """A purchased rod (not printed), cut to length."""
+
+    name: str
+    count: int
+    length_m: float
+    diameter_m: float
+
+    @property
+    def total_length_m(self) -> float:
+        return self.count * self.length_m
+
+
+@dataclass(frozen=True)
+class FastenerUse:
+    """Screws (each with a hex nut) of one kind."""
+
+    purpose: str
+    screws: int
+    min_length_m: float
+
+    @property
+    def nuts(self) -> int:
+        return self.screws
+
+    @property
+    def screw_length_mm(self) -> int:
+        return standard_screw_length_mm(to_mm(self.min_length_m))
+
+
+@dataclass(frozen=True)
 class PartInstance:
     name: str
     count: int
@@ -361,6 +400,22 @@ class QfhPartSet(QfhHolderPart):
             for sign in (1.0, -1.0):
                 out.append(Placement(small.part_name, small, (0.0, sign * cs, z), 90.0))
         return out
+
+    def rods(self) -> list[Rod]:
+        """Purchased rods: none, the spreaders are single printed parts."""
+        return []
+
+    def fasteners(self) -> list[FastenerUse]:
+        return [FastenerUse("clamp plates", self.screw_count, self.min_screw_length_m)]
+
+    def fit_problems(self) -> list[FitProblem]:
+        """Printed parts that exceed the build volume."""
+        problems = []
+        for instance in self.instances():
+            problem = self.print_settings.check_fit(instance.name, instance.part.size_mm())
+            if problem is not None:
+                problems.append(problem)
+        return problems
 
     @property
     def clamp_count(self) -> int:
