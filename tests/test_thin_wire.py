@@ -191,6 +191,7 @@ template: dipole
 params:
   center_frequency_mhz: 145
   diameter_mm: 40
+  segments: 31   # explicit: used as is (the automatic rule would pick a coarser count)
 sweep:
   start_mhz: 144
   stop_mhz: 146

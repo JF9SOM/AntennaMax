@@ -103,8 +103,18 @@ def load_design(path: str | Path) -> LoadedDesign:
     except ValidationError as exc:
         raise DesignError(f"{path}: invalid design:\n{_format_errors(exc)}") from exc
 
+    template_cls = TEMPLATES[spec.template]
+    params = dict(spec.params)
+    given = {"max_frequency_hz", "max_frequency_mhz"} & params.keys()
+    if "max_frequency_hz" in template_cls.model_fields and not given:
+        # Segmentation is judged at the top of the sweep (never below the centre frequency).
+        centre = params.get("center_frequency_hz")
+        if centre is None and isinstance(params.get("center_frequency_mhz"), int | float):
+            centre = params["center_frequency_mhz"] * 1e6
+        top = spec.sweep.stop_hz
+        params["max_frequency_hz"] = max(top, centre) if isinstance(centre, int | float) else top
     try:
-        template = TEMPLATES[spec.template].model_validate(spec.params)
+        template = template_cls.model_validate(params)
     except ValidationError as exc:
         raise DesignError(
             f"{path}: invalid params for template {spec.template!r}:\n"

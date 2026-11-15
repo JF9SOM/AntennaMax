@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from antennamax import __version__
+from antennamax.core.segmentation import SegmentationError
 from antennamax.core.units import hz_to_mhz
 from antennamax.io.design import DesignError, load_design
 from antennamax.results.result import Result
@@ -142,7 +143,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _view(args.design, args.screenshot)
         if args.command == "plot":
             return _plot(args.design, args.save)
-    except (DesignError, MissingExtraError) as exc:
+    except (DesignError, SegmentationError, MissingExtraError) as exc:
         print(f"antennamax: error: {exc}", file=sys.stderr)
         return 2
     return 2  # unreachable: subcommand is required

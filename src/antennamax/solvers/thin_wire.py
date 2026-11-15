@@ -1,8 +1,8 @@
 """Thin-wire applicability checks for the NEC2 moment-method solver.
 
-Thresholds on the segment length / conductor radius ratio (delta / a), from the NEC2
-guidelines (Burke & Poggio, NEC-2 Manual; Part III User's Guide): the standard thin-wire
-kernel needs delta / a > 8, the extended thin-wire kernel (EK card) allows delta / a > 2.
+Thresholds on the segment length / conductor radius ratio (delta / a): the standard thin-wire
+kernel needs delta / a > 8, the extended thin-wire kernel (EK card) allows delta / a > 2. The
+values and their source are defined in core/segmentation.py.
 """
 
 from __future__ import annotations
@@ -11,11 +11,12 @@ import math
 import warnings
 
 from antennamax.core.geometry import Geometry, Wire
-
-# TODO(要確認): 閾値は NEC2 ガイドライン(標準カーネル Δ/a > 8、拡張カーネル Δ/a > 2)の
-# 一般的な説明に基づく。マニュアル原典での記述・適用条件は未照合(docs/VERIFICATION.md 参照)。
-STANDARD_KERNEL_MIN_RATIO = 8.0
-EXTENDED_KERNEL_MIN_RATIO = 2.0
+from antennamax.core.segmentation import (
+    EXTENDED_KERNEL_MIN_SEGMENT_TO_RADIUS as EXTENDED_KERNEL_MIN_RATIO,
+)
+from antennamax.core.segmentation import (
+    STANDARD_KERNEL_MIN_SEGMENT_TO_RADIUS as STANDARD_KERNEL_MIN_RATIO,
+)
 
 OK = "ok"
 STANDARD_OUT_OF_RANGE = "standard_out_of_range"  # delta/a < 8: outside the standard kernel

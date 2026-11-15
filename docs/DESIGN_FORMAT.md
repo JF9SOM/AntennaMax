@@ -29,7 +29,7 @@ pattern:                  # 省略すると放射パターンは計算しない
 | `center_frequency_hz` / `_mhz` | 中心周波数(必須) |
 | `length_m` / `_mm` | 全長。省略時は 0.95 × λ/2(目安。VERIFICATION.md 参照) |
 | `diameter_m` / `_mm` | 導体径(必須) |
-| `segments` | 分割数。奇数(既定 31) |
+| `segments` | 分割数。奇数。省略時は自動決定(下記)。指定時はそのまま使い、細線近似の警告のみ |
 
 ### yagi(自由空間、素子は y 軸に平行、ブームは x 軸)
 | キー | 内容 |
@@ -37,10 +37,23 @@ pattern:                  # 省略すると放射パターンは計算しない
 | `center_frequency_hz` / `_mhz` | 分割数決定に使う中心周波数(必須) |
 | `elements` | 2 個以上のリスト。各要素: `position_m`/`_mm`(ブーム上の位置)、`length_m`/`_mm`(全長)、`diameter_m`/`_mm`(導体径) |
 | `feed_index` | 給電エレメントの番号(0 始まり) |
-| `segments_per_wavelength` | 波長あたりの分割数(既定 20)。全エレメント同一分割数 |
+| `segments_per_wavelength` | 波長あたりの目標分割数(既定 20)。全エレメント同一分割数 |
 
 反射器から導波器の順に `position` を増やして並べる(主ビームは +x 方向)。
 ブーム補正は未実装。
+
+### 分割数の自動決定
+
+`segments` を省略した dipole と、yagi は `core/segmentation.py` で分割数を決める。
+最高周波数(掃引の上限。`max_frequency_hz`/`_mhz` を params で指定すれば優先)で評価する。
+
+- 制約: セグメント長 < λ/10、かつ セグメント長/半径 Δ/a > 2(NEC2 拡張細線カーネルの下限)
+- 目標密度(`segments_per_wavelength`)から N を決め、Δ/a の制約で上限を超えれば N を減らし、
+  λ/10 で足りなければ N を増やす。中央給電のため奇数。yagi は全エレメント同一 N
+  (最も厳しいエレメントで決める)
+- 両立できない場合(例: 1296 MHz で直径 30 mm のエレメント)はエラー
+  (`cannot segment this geometry for NEC2 ...`、終了コード 2)
+- Δ/a < 8 になるときは拡張細線カーネルが自動で有効になる
 
 ## sweep
 
