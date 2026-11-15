@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from antennamax.core.geometry import Geometry
+from antennamax.results.result import Result
 
 
 class SolverUnavailableError(RuntimeError):
@@ -29,5 +30,4 @@ class Sweep:
 class Solver(Protocol):
     def supports(self, geometry: Geometry) -> bool: ...
 
-    # TODO: return type becomes results.Result once the Result type exists.
-    def run(self, geometry: Geometry, sweep: Sweep) -> object: ...
+    def run(self, geometry: Geometry, sweep: Sweep) -> Result: ...
