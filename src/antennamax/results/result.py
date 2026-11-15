@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -24,6 +24,8 @@ class Result:
     theta_rad: NDArray[np.float64] | None = None
     phi_rad: NDArray[np.float64] | None = None
     gain_dbi: NDArray[np.float64] | None = None
+    # Solver information, e.g. {"solver": "nec2", "extended_kernel": True, ...}.
+    meta: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.frequencies_hz = np.asarray(self.frequencies_hz, dtype=float)
@@ -102,6 +104,7 @@ class Result:
             "gain_dbi": None,
             "max_gain_dbi": None,
             "front_to_back_db": None,
+            "meta": dict(self.meta),
         }
         if self.gain_dbi is not None:
             d["theta_rad"] = self.theta_rad.tolist()

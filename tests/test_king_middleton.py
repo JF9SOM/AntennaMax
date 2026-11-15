@@ -11,11 +11,13 @@ xfail(strict=True) with the observed difference recorded; see docs/VERIFICATION.
 
 import csv
 import math
+import warnings
 from pathlib import Path
 
 import pytest
 
 from antennamax.solvers.nec2 import input_impedance
+from antennamax.solvers.thin_wire import ThinWireWarning
 from antennamax.templates import Dipole
 
 C = 299_792_458.0
@@ -79,7 +81,10 @@ def nec2_impedance(omega: float, beta_h: float, segments: int | None = None) -> 
     dipole = Dipole(
         center_frequency_hz=FREQUENCY_HZ, length_m=2 * h, diameter_m=2 * a, segments=segments
     )
-    return input_impedance(dipole.to_geometry(), FREQUENCY_HZ)
+    # The segment rule keeps delta/a >= 8, so the solver's thin-wire check must stay silent.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ThinWireWarning)
+        return input_impedance(dipole.to_geometry(), FREQUENCY_HZ)
 
 
 def _param(row):

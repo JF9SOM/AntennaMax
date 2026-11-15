@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 from antennamax.core.geometry import Geometry
 from antennamax.io.design import LoadedDesign
 from antennamax.results.result import Result
+from antennamax.solvers import thin_wire
 from antennamax.solvers.base import Sweep
 from antennamax.solvers.nec2 import Nec2Solver
 
@@ -58,6 +59,8 @@ class WireDraw:
     radius: float  # true conductor radius [m]
     display_radius: float  # radius used for drawing [m]
     is_fed: bool
+    ratio: float  # segment length / radius
+    status: str  # thin_wire.OK / STANDARD_OUT_OF_RANGE / EXTENDED_OUT_OF_RANGE
 
 
 def _bounds(geometry: Geometry) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
@@ -76,20 +79,55 @@ def geometry_center(geometry: Geometry) -> NDArray[np.float64]:
     return 0.5 * (lo + hi)
 
 
-def wire_draws(geometry: Geometry) -> tuple[list[WireDraw], float]:
+def wire_draws(geometry: Geometry, extended_kernel: bool = False) -> tuple[list[WireDraw], float]:
     """Wires with drawing radii, and the magnification applied to the true radii.
 
     Radii keep their proportions; they are magnified (never reduced) so that the thickest wire
-    is visible at about 1.2 % of the structure size.
+    is visible at about 1.2 % of the structure size. Wire status follows the solver's rules for
+    the kernel in use (`extended_kernel`).
     """
     size = geometry_size(geometry)
     max_radius = max(w.radius for w in geometry.wires)
     magnification = max(1.0, TARGET_WIRE_RADIUS_FRACTION * size / max_radius)
-    draws = [
-        WireDraw(w.start, w.end, w.radius, w.radius * magnification, i == geometry.feed_wire)
-        for i, w in enumerate(geometry.wires)
-    ]
+    draws = []
+    for i, w in enumerate(geometry.wires):
+        ratio = thin_wire.segment_to_radius_ratio(w)  # judged by the solver's own rules
+        draws.append(
+            WireDraw(
+                w.start,
+                w.end,
+                w.radius,
+                w.radius * magnification,
+                i == geometry.feed_wire,
+                ratio,
+                thin_wire.wire_status(ratio, extended_kernel),
+            )
+        )
     return draws, magnification
+
+
+WIRE_COLORS = {
+    thin_wire.OK: "#b87333",  # copper
+    thin_wire.STANDARD_OUT_OF_RANGE: "yellow",
+    thin_wire.EXTENDED_OUT_OF_RANGE: "red",
+}
+FEED_COLOR = "dodgerblue"
+_WIRE_LABELS = {
+    thin_wire.OK: "wire: delta/a >= 8",
+    thin_wire.STANDARD_OUT_OF_RANGE: "wire: delta/a < 8",
+    thin_wire.EXTENDED_OUT_OF_RANGE: "wire: delta/a < 2",
+}
+
+
+def legend_entries(draws: list[WireDraw], extended_kernel: bool = False) -> list[tuple[str, str]]:
+    """(label, colour) pairs for the wire categories present, plus the feed point."""
+    present = {d.status for d in draws}
+    labels = dict(_WIRE_LABELS)
+    if extended_kernel:  # the extended kernel's limit (2) replaces the standard one (8)
+        labels[thin_wire.OK] = "wire: delta/a >= 2"
+    entries = [(labels[s], WIRE_COLORS[s]) for s in WIRE_COLORS if s in present]
+    entries.append(("feed point", FEED_COLOR))
+    return entries
 
 
 def feed_point(geometry: Geometry) -> NDArray[np.float64]:

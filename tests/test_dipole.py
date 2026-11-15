@@ -18,8 +18,14 @@ def _dipole_impedance(length_in_wavelengths: float, radius: float, segments: int
 
 
 def _resonant_length(radius: float) -> float:
-    """Dipole length (in wavelengths) at which the input reactance is zero."""
-    return brentq(lambda length: _dipole_impedance(length, radius).imag, 0.40, 0.50, xtol=1e-5)
+    """Dipole length (in wavelengths) at which the input reactance is zero.
+
+    21 segments keep segment length / radius above 8 for every radius and length searched
+    (worst case: a = 5 mm, 0.40 lambda -> delta/a = 11.4), so the thin-wire check stays quiet.
+    """
+    return brentq(
+        lambda length: _dipole_impedance(length, radius, segments=21).imag, 0.40, 0.50, xtol=1e-5
+    )
 
 
 # --- Physical validity tests -------------------------------------------------------------

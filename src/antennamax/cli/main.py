@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Sequence
+import warnings
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 
 from antennamax import __version__
@@ -13,7 +15,35 @@ from antennamax.core.units import hz_to_mhz
 from antennamax.io.design import DesignError, load_design
 from antennamax.results.result import Result
 from antennamax.solvers.nec2 import Nec2Solver
+from antennamax.solvers.thin_wire import ThinWireWarning
 from antennamax.viz import MissingExtraError
+
+
+@contextmanager
+def _thin_wire_warnings() -> Iterator[None]:
+    """Print thin-wire warnings as `antennamax: warning: ...` on stderr (once each)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("always", ThinWireWarning)
+        original = warnings.showwarning
+        seen: set[str] = set()
+
+        def show(message, category, filename, lineno, file=None, line=None):
+            if issubclass(category, ThinWireWarning):
+                if str(message) not in seen:  # the viewers run the solver more than once
+                    seen.add(str(message))
+                    print(f"antennamax: warning: {message}", file=sys.stderr)
+            else:
+                original(message, category, filename, lineno, file, line)
+
+        warnings.showwarning = show
+        yield
+
+
+def _kernel_line(result: Result) -> str:
+    kernel = "on" if result.meta.get("extended_kernel") else "off"
+    ratio = result.meta.get("min_segment_to_radius")
+    suffix = f"; min segment/radius = {ratio:.2f}" if ratio is not None else ""
+    return f"Solver: NEC2, extended thin-wire kernel: {kernel}{suffix}"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -59,7 +89,8 @@ def _run(design_path: Path, as_json: bool) -> int:
         return 2
     geometry = design.template.to_geometry()
     solver = Nec2Solver(pattern_resolution_deg=design.pattern_resolution_deg)
-    result = solver.run(geometry, design.sweep)
+    with _thin_wire_warnings():
+        result = solver.run(geometry, design.sweep)
 
     if as_json:
         payload = {"template": design.template_name, "result": result.to_dict()}
@@ -67,6 +98,7 @@ def _run(design_path: Path, as_json: bool) -> int:
     else:
         print(f"Design: {design_path} (template: {design.template_name})")
         print(f"Reference impedance Z0 = {result.z0:g} ohm")
+        print(_kernel_line(result))
         print()
         print(_format_table(result))
     return 0
@@ -76,7 +108,8 @@ def _simulate_for_viewer(design_path: Path):
     """Load the design and run the calculations the viewers need."""
     from antennamax.viz.data import simulate
 
-    return simulate(load_design(design_path))
+    with _thin_wire_warnings():
+        return simulate(load_design(design_path))
 
 
 def _view(design_path: Path, screenshot: Path | None) -> int:

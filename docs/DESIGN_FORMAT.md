@@ -54,9 +54,14 @@ pattern:                  # 省略すると放射パターンは計算しない
 
 ## 出力
 
-- 既定: 周波数ごとの R, X, SWR(Z0 = 50 Ω)の表。パターン計算時は最大利得と F/B(dB)も表示。
+- 既定: ソルバー情報の行(拡張細線カーネルの on/off と最小 Δ/a)と、周波数ごとの R, X, SWR(Z0 = 50 Ω)の表。パターン計算時は最大利得と F/B(dB)も表示。
 - `--json`: `{"template": ..., "result": {...}}`。`result` のキーは
   `frequencies_hz, z0, impedance_real, impedance_imag, swr, theta_rad, phi_rad, gain_dbi,
-  max_gain_dbi, front_to_back_db`(パターン未計算の項目は null)。
+  max_gain_dbi, front_to_back_db, meta`(パターン未計算の項目は null)。`meta` はソルバー情報で、
+  `solver`("nec2")、`extended_kernel`(拡張細線カーネルの使用有無)、
+  `min_segment_to_radius`(全 Wire の最小 Δ/a)を含む。
   JSON は無限大を表せないため、SWR 無限大・完全ヌル(-inf)・F/B 無限大は `null` で出力する。
 - 設計ファイルのエラーは標準エラー出力にメッセージを出し、終了コード 2 を返す。
+- 細線近似の適用条件(セグメント長/半径 Δ/a < 8)を外れる Wire があると、標準エラー出力に
+  `antennamax: warning: ...` を出す(Δ/a < 2 は拡張カーネルでも範囲外の強い警告)。
+  `view` ではその Wire を黄色(Δ/a < 8)・赤(Δ/a < 2)で表示する。
