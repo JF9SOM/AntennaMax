@@ -103,10 +103,17 @@
 - [ ] 基板データ出力の方式(Gerber 直接出力か DXF / KiCad 経由か)
 
 ### 依存・配布
-- [ ] cadquery-ocp の Linux x86-64 wheel の有無
 - [ ] PySide6 / pyvista の 3 OS 動作(CI で確認する)
 - [ ] OS 別インストーラーのサイズ(OCP + VTK + Qt)
 
 ## 検証済み
 
-(まだなし)
+### 依存・配布
+- [x] OCP(build123d の CAD カーネル)の導入: `uv sync --extra cad` で、GitHub Actions の
+  ubuntu-latest(Linux x86-64)・windows-latest・macos-latest × Python 3.11 / 3.13 の 6 構成すべてで
+  導入でき、部品テスト(`tests/test_mech.py` の 19 件)が通った(コミット f733602、run 43718148055)。
+  導入されたパッケージ: **cadquery-ocp-novtk 8.0.1.1.0**(+ cadquery-ocp-proxy 8.0.1.1.0)、
+  **build123d 0.13.0**、ocp-gordon 0.3.1。パッケージ名は従来想定の `cadquery-ocp`(7.9.3.1)では
+  なく VTK 抜きの `cadquery-ocp-novtk` で、wheel は Linux x86-64 にも存在した。手元の
+  macOS ARM64(Python 3.11)でも同じ版が導入できた。macos-latest ランナーの CPU アーキテクチャは
+  ログから確認していない。Linux ARM64 は未確認

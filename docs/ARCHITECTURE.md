@@ -88,6 +88,8 @@ designs/<type>/<variant>/
 - PyNEC 2.4.0: Windows x86-64 / Linux x86-64 / macOS ARM64・x86-64 の wheel あり。
   Python >= 3.11。Windows ARM64・Linux ARM64 の wheel はなし
 - cadquery-ocp 7.9.3.1: Windows x86-64 / Linux ARM64 / macOS ARM64・x86-64 の wheel を確認
+  (実際の `uv sync --extra cad` では `cadquery-ocp-novtk 8.0.1.1.0` + build123d 0.13.0 が導入され、
+  Linux x86-64 を含む 3 OS × Python 3.11/3.13 の CI で動作を確認。docs/VERIFICATION.md 参照)
   (Linux x86-64 は要確認)
 - openEMS: Windows は MSVC ビルド版を利用、macOS は Homebrew でソースビルド後に
   Python モジュールを手動インストール
