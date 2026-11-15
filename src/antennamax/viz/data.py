@@ -89,6 +89,7 @@ def wire_draws(geometry: Geometry, extended_kernel: bool = False) -> tuple[list[
     size = geometry_size(geometry)
     max_radius = max(w.radius for w in geometry.wires)
     magnification = max(1.0, TARGET_WIRE_RADIUS_FRACTION * size / max_radius)
+    fed = {f.wire for f in geometry.resolved_feeds()}
     draws = []
     for i, w in enumerate(geometry.wires):
         ratio = thin_wire.segment_to_radius_ratio(w)  # judged by the solver's own rules
@@ -98,7 +99,7 @@ def wire_draws(geometry: Geometry, extended_kernel: bool = False) -> tuple[list[
                 w.end,
                 w.radius,
                 w.radius * magnification,
-                i == geometry.feed_wire,
+                i in fed,
                 ratio,
                 thin_wire.wire_status(ratio, extended_kernel),
             )
@@ -130,12 +131,21 @@ def legend_entries(draws: list[WireDraw], extended_kernel: bool = False) -> list
     return entries
 
 
+def feed_points(geometry: Geometry) -> list[NDArray[np.float64]]:
+    """Centre of every driven segment (the middle segment unless a Feed names one)."""
+    points = []
+    for feed in geometry.resolved_feeds():
+        w = geometry.wires[feed.wire]
+        t = (geometry.feed_segment_number(feed) - 0.5) / w.segments
+        points.append(
+            np.asarray(w.start, dtype=float) * (1 - t) + np.asarray(w.end, dtype=float) * t
+        )
+    return points
+
+
 def feed_point(geometry: Geometry) -> NDArray[np.float64]:
-    """Centre of the driven segment (the middle segment of the fed wire)."""
-    w = geometry.wires[geometry.feed_wire]
-    segment = (w.segments + 1) // 2  # 1-based, same rule as Nec2Solver
-    t = (segment - 0.5) / w.segments
-    return np.asarray(w.start, dtype=float) * (1 - t) + np.asarray(w.end, dtype=float) * t
+    """Centre of the first driven segment."""
+    return feed_points(geometry)[0]
 
 
 def pattern_surface(

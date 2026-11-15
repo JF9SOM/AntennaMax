@@ -13,7 +13,7 @@ from antennamax.viz.data import (
     FEED_COLOR,
     WIRE_COLORS,
     DesignRun,
-    feed_point,
+    feed_points,
     geometry_center,
     geometry_size,
     legend_entries,
@@ -51,8 +51,8 @@ def build_scene(run: DesignRun, off_screen: bool = False, window_size=(1000, 800
         )
     thickest = max(d.display_radius for d in draws)
     feed_radius = max(1.5 * thickest, min(4.0 * thickest, 0.02 * size))
-    feed = pv.Sphere(radius=feed_radius, center=feed_point(geometry))
-    plotter.add_mesh(feed, color=FEED_COLOR)
+    for point in feed_points(geometry):
+        plotter.add_mesh(pv.Sphere(radius=feed_radius, center=point), color=FEED_COLOR)
 
     result = run.pattern_result
     x, y, z, gain = pattern_surface(

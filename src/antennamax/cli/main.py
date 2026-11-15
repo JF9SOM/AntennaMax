@@ -71,13 +71,21 @@ def _format_table(result: Result) -> str:
     has_pattern = result.gain_dbi is not None
     header = f"{'f[MHz]':>10} {'R[ohm]':>10} {'X[ohm]':>10} {'SWR':>8}"
     if has_pattern:
-        header += f" {'Gmax[dBi]':>10} {'F/B[dB]':>9}"
+        header += (
+            f" {'Gmax[dBi]':>10} {'F/B[dB]':>9} {'AR(z)[dB]':>10} {'RHCP(z)[dBic]':>14}"
+            f" {'LHCP(z)[dBic]':>14}"
+        )
     lines = [header]
     for i, f in enumerate(result.frequencies_hz):
         z = result.impedance[i]
         line = f"{hz_to_mhz(f):>10.3f} {z.real:>10.2f} {z.imag:>10.2f} {result.swr[i]:>8.2f}"
         if has_pattern:
             line += f" {result.max_gain_dbi[i]:>10.2f} {result.front_to_back_db[i]:>9.2f}"
+            line += (
+                f" {result.zenith_axial_ratio_db[i]:>10.2f}"
+                f" {result.zenith_rhcp_gain_dbic[i]:>14.2f}"
+                f" {result.zenith_lhcp_gain_dbic[i]:>14.2f}"
+            )
         lines.append(line)
     return "\n".join(lines)
 
@@ -100,6 +108,12 @@ def _run(design_path: Path, as_json: bool) -> int:
         print(f"Design: {design_path} (template: {design.template_name})")
         print(f"Reference impedance Z0 = {result.z0:g} ohm")
         print(_kernel_line(result))
+        n_feeds = result.feed_impedances.shape[1]
+        if n_feeds > 1:
+            print(
+                f"Note: {n_feeds} sources; Z and SWR are those of the first source "
+                "(all of them: --json feed_impedances_*)"
+            )
         print()
         print(_format_table(result))
     return 0

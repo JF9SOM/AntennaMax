@@ -67,13 +67,19 @@ pattern:                  # 省略すると放射パターンは計算しない
 
 ## 出力
 
-- 既定: ソルバー情報の行(拡張細線カーネルの on/off と最小 Δ/a)と、周波数ごとの R, X, SWR(Z0 = 50 Ω)の表。パターン計算時は最大利得と F/B(dB)も表示。
+- 既定: ソルバー情報の行(拡張細線カーネルの on/off と最小 Δ/a)と、周波数ごとの R, X, SWR(Z0 = 50 Ω)の表。パターン計算時は最大利得、F/B(dB)、天頂(θ=0)の軸比 AR と RHCP/LHCP 利得(dBic)も表示。
+  AR は円偏波 0 dB、直線偏波は inf(JSON では null)。
+- `impedance`/`swr` は最初の給電点基準。給電点が複数のとき(Geometry の `feeds`)は
+  `feed_impedances_*`(周波数×給電数)に全給電点が入り、表には注記が 1 行出る。
 - `--json`: `{"template": ..., "result": {...}}`。`result` のキーは
-  `frequencies_hz, z0, impedance_real, impedance_imag, swr, theta_rad, phi_rad, gain_dbi,
-  max_gain_dbi, front_to_back_db, meta`(パターン未計算の項目は null)。`meta` はソルバー情報で、
+  `frequencies_hz, z0, impedance_real, impedance_imag, feed_impedances_real,
+  feed_impedances_imag, swr, theta_rad, phi_rad, gain_dbi,
+  max_gain_dbi, front_to_back_db, zenith_axial_ratio_db, zenith_rhcp_gain_dbic,
+  zenith_lhcp_gain_dbic, meta`(パターン未計算の項目は null)。`meta` はソルバー情報で、
   `solver`("nec2")、`extended_kernel`(拡張細線カーネルの使用有無)、
   `min_segment_to_radius`(全 Wire の最小 Δ/a)を含む。
-  JSON は無限大を表せないため、SWR 無限大・完全ヌル(-inf)・F/B 無限大は `null` で出力する。
+  JSON は無限大を表せないため、SWR 無限大・完全ヌル(-inf)・F/B 無限大・AR 無限大・利得 -inf は
+  `null` で出力する。
 - 設計ファイルのエラーは標準エラー出力にメッセージを出し、終了コード 2 を返す。
 - 細線近似の適用条件(セグメント長/半径 Δ/a < 8)を外れる Wire があると、標準エラー出力に
   `antennamax: warning: ...` を出す(Δ/a < 2 は拡張カーネルでも範囲外の強い警告)。

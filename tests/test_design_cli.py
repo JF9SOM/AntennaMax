@@ -135,7 +135,7 @@ def test_cli_table_with_pattern(capsys):
     assert len(rows) == 3
     # The 144 MHz row: R, X, SWR, Gmax, F/B are all numbers.
     fields = [line for line in rows if line.split()[0] == "144.000"][0].split()
-    assert len(fields) == 6
+    assert len(fields) == 9  # f, R, X, SWR, Gmax, F/B, AR(z), RHCP(z), LHCP(z)
     assert float(fields[4]) > 5.0  # Gmax of a 3-element beam [dBi]
     assert float(fields[5]) > 0.0  # F/B [dB]
 
