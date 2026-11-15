@@ -42,10 +42,10 @@ def test_resonant_length_decreases_with_radius():
 
 def test_half_wave_dipole_regression():
     # Regression value computed with PyNEC 2.4.0 (100 MHz, lambda/2, radius 1 mm, 31 segments).
-    # Not yet cross-checked against an independent engine (nec2c / MMANA).
+    # Not yet cross-checked against literature benchmarks, openEMS (P2) or measurements.
     # Note it differs from the textbook 73.1 + j42.5 ohm (induced-EMF method, sinusoidal
     # current); see docs/VERIFICATION.md.
-    # PyNEC 2.4.0 による計算値。独立エンジン(nec2c/MMANA)との照合は未実施。
+    # PyNEC 2.4.0 による計算値。文献ベンチマーク・openEMS(P2)・実測との照合は未実施。
     z = _dipole_impedance(0.5, 1e-3)
     assert math.isclose(z.real, 81.92, abs_tol=0.5)
     assert math.isclose(z.imag, 46.54, abs_tol=0.5)

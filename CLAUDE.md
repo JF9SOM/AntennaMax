@@ -43,7 +43,7 @@ src/antennamax/
   results/     Result 型, 指標計算(SWR, 利得, F/B, 軸比, RHCP/LHCP, 効率)
   mech/        build123d による 3D プリント部品生成
   buildkit/    製作キット出力(寸法図, 切断リスト, BOM, 手順書)
-  io/          MMANA .maa 読込, .nec 入出力, Touchstone
+  io/          .nec 入出力, Touchstone(MMANA .maa 読込は将来の移行支援、優先度低)
   optimize/
   cli/
   gui/         (P4)
@@ -111,7 +111,7 @@ uv run antennamax --help          # CLI
 
 - ソルバーの結果は **既知の理論値・文献値** と比較するテストを書く
   (例: 自由空間の半波長ダイポール ≈ 73 + j42 Ω。許容誤差は導体半径依存のため緩めに)
-- MMANA との比較用リファレンスケースは `tests/reference/` に置く
+- 文献値・実測値のリファレンスケースは `tests/reference/` に置く
 - openEMS を要するテストは `@pytest.mark.openems` を付け、未インストール時は skip
 - CI は Linux / Windows / macOS × Python 3.11 / 3.13 で回る。OS 依存の失敗を出さないこと
 
