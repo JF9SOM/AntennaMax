@@ -74,6 +74,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parts.add_argument(
         "--mast-diameter-mm", type=float, help="mast outer diameter in mm (default: VP20, 26 mm)"
     )
+    parts.add_argument(
+        "--build-volume-mm",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        help="printer build volume in mm (default 220 220 250)",
+    )
     return parser
 
 
@@ -166,9 +173,15 @@ def _eprint(message: str) -> None:
         print(message.encode("ascii", "replace").decode("ascii"), file=sys.stderr)
 
 
-def _parts(design_path: Path, out_dir: Path, clearance_mm: float, mast_mm: float | None) -> int:
-    from antennamax.mech.base import require_cad
-    from antennamax.mech.qfh_spreader import QfhSpreader
+def _parts(
+    design_path: Path,
+    out_dir: Path,
+    clearance_mm: float,
+    mast_mm: float | None,
+    build_volume_mm: list[float] | None,
+) -> int:
+    from antennamax.mech.base import require_cad, to_mm
+    from antennamax.mech.qfh_parts import QfhPartSet
 
     design = load_design(design_path)
     if design.template_name != "qfh":
@@ -178,12 +191,37 @@ def _parts(design_path: Path, out_dir: Path, clearance_mm: float, mast_mm: float
         )
         return 2
     require_cad()  # fail early with the install hint
-    params: dict = {"qfh": design.template, "print_settings": {"clearance_mm": clearance_mm}}
+    settings: dict = {"clearance_mm": clearance_mm}
+    if build_volume_mm is not None:
+        settings["build_volume_m"] = tuple(v / 1000.0 for v in build_volume_mm)
+    params: dict = {"qfh": design.template, "print_settings": settings}
     if mast_mm is not None:
         params["mast_outer_diameter_mm"] = mast_mm
-    spreader = QfhSpreader.model_validate(params)
-    for path in spreader.export(out_dir, "qfh_spreader"):
-        print(f"wrote {path}")
+    part_set = QfhPartSet.model_validate(params)
+
+    rows = []
+    for instance in part_set.instances():
+        instance.part.export(out_dir)
+        size = instance.part.size_mm()
+        rows.append((instance, size))
+        problem = part_set.print_settings.check_fit(instance.name, size)
+        if problem is not None:
+            _eprint(f"antennamax: warning: {problem.message()}")
+
+    print(f"{'Part':<26} {'Qty':>3} {'From top[mm]':>13}   Size x y z [mm]")
+    for instance, (x, y, z) in rows:
+        top = to_mm(instance.distance_from_top_m)
+        print(f"{instance.name:<26} {instance.count:>3} {top:>13.1f}   {x:.1f} x {y:.1f} x {z:.1f}")
+    fastener = part_set.fastener
+    min_length = to_mm(part_set.min_screw_length_m)
+    print(
+        f"Fasteners: {part_set.screw_count} x {fastener.name} screws "
+        f"(length >= {min_length:.1f} mm, use {part_set.screw_length_mm} mm), "
+        f"{part_set.nut_count} x {fastener.name} hex nuts"
+    )
+    for instance, _ in rows:
+        for path in (out_dir / f"{instance.name}.stl", out_dir / f"{instance.name}.step"):
+            print(f"wrote {path}")
     return 0
 
 
@@ -197,7 +235,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "plot":
             return _plot(args.design, args.save)
         if args.command == "parts":
-            return _parts(args.design, args.out, args.clearance_mm, args.mast_diameter_mm)
+            return _parts(
+                args.design,
+                args.out,
+                args.clearance_mm,
+                args.mast_diameter_mm,
+                args.build_volume_mm,
+            )
     except (DesignError, SegmentationError, MissingExtraError) as exc:
         print(f"antennamax: error: {exc}", file=sys.stderr)
         return 2
