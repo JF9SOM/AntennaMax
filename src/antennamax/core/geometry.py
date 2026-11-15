@@ -27,9 +27,10 @@ class Wire:
 
 @dataclass
 class Geometry:
-    """Collection of wires."""
+    """Collection of wires. `feed_wire` is the 0-based index of the driven wire."""
 
     wires: list[Wire] = field(default_factory=list)
+    feed_wire: int = 0
 
     def add(self, wire: Wire) -> None:
         self.wires.append(wire)

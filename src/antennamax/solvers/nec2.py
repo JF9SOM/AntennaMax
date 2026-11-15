@@ -23,8 +23,10 @@ def _simulate(
 
     if not geometry.wires:
         raise ValueError("geometry has no wires")
+    if not 0 <= geometry.feed_wire < len(geometry.wires):
+        raise ValueError("feed_wire is out of range")
     if feed_segment is None:
-        feed_segment = (geometry.wires[0].segments + 1) // 2
+        feed_segment = (geometry.wires[geometry.feed_wire].segments + 1) // 2
 
     ctx = nec_context()
     geo = ctx.get_geometry()
@@ -32,7 +34,7 @@ def _simulate(
         geo.wire(tag, w.segments, *w.start, *w.end, w.radius, 1.0, 1.0)
     ctx.geometry_complete(0)
     ctx.gn_card(-1, 0, 0, 0, 0, 0, 0, 0)  # free space
-    ctx.ex_card(0, 1, feed_segment, 0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    ctx.ex_card(0, geometry.feed_wire + 1, feed_segment, 0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     ctx.fr_card(0, 1, hz_to_mhz(frequency_hz), 0.0)
     if pattern_resolution_deg is None:
         ctx.xq_card(0)
@@ -68,9 +70,9 @@ def _pattern_shape(resolution_deg: float) -> tuple[int, int]:
 def input_impedance(
     geometry: Geometry, frequency_hz: float, feed_segment: int | None = None
 ) -> complex:
-    """Input impedance (ohm) of free-space `geometry`, fed at the centre of wire 1.
+    """Input impedance (ohm) of free-space `geometry`, fed at the centre of `geometry.feed_wire`.
 
-    `feed_segment` is 1-based within the first wire; defaults to its middle segment
+    `feed_segment` is 1-based within the fed wire; defaults to its middle segment
     (requires an odd segment count for a true centre feed).
     """
     return _simulate(geometry, frequency_hz, feed_segment, None)[0]
