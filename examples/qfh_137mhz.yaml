@@ -1,0 +1,16 @@
+# Quadrifilar helix for 137.5 MHz (weather satellites), free space.
+# Dimensions follow Coppens' method (KF8EEZ re-implementation); see templates/qfh.py.
+# The bend radius is used for the dimensions only; the NEC2 model has sharp corners.
+template: qfh
+params:
+  center_frequency_mhz: 137.5
+  diameter_mm: 3
+  bend_radius_mm: 15
+  handedness: left       # left = RHCP towards +z (feed at the top)
+  # turns: 0.5, width/height ratio: 0.44 (defaults)
+sweep:
+  start_mhz: 135
+  stop_mhz: 140
+  points: 11
+pattern:
+  resolution_deg: 10

@@ -18,10 +18,10 @@ from pydantic import (
 
 from antennamax.solvers.base import Sweep
 from antennamax.solvers.nec2 import Nec2Solver
-from antennamax.templates import Dipole, Template, Yagi
+from antennamax.templates import Dipole, Qfh, Template, Yagi
 from antennamax.templates.base import SIModel
 
-TEMPLATES: dict[str, type[Template]] = {"dipole": Dipole, "yagi": Yagi}
+TEMPLATES: dict[str, type[Template]] = {"dipole": Dipole, "yagi": Yagi, "qfh": Qfh}
 
 
 class DesignError(ValueError):

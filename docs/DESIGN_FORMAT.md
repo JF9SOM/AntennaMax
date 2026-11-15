@@ -42,6 +42,22 @@ pattern:                  # 省略すると放射パターンは計算しない
 反射器から導波器の順に `position` を増やして並べる(主ビームは +x 方向)。
 ブーム補正は未実装。
 
+### qfh(四線ヘリカル、自由空間、軸は z、給電は上部)
+| キー | 内容 |
+|---|---|
+| `center_frequency_hz` / `_mhz` | 周波数(必須) |
+| `diameter_m` / `_mm` | 導体径(必須。補正係数は 15 mm で頭打ち) |
+| `bend_radius_m` / `_mm` | 曲げ半径(必須。寸法計算のみ。NEC2 形状は直角) |
+| `turns` | 巻き数(既定 0.5) |
+| `width_height_ratio` | 幅/高さ比(既定 0.44) |
+| `handedness` | `left`(既定、給電点が上で天頂向きに RHCP)または `right`(LHCP) |
+| `speed_of_light_m_s` | 光速(既定 299792458。Coppens の原典に合わせるなら 3e8) |
+| `segments_per_wavelength` / `max_frequency_*` | 分割数の自動決定(dipole と同じ) |
+
+寸法式は Coppens (ON6JC) の方式を KF8EEZ が再実装したページに準拠(出典と未照合の点は
+`templates/qfh.py` と VERIFICATION.md を参照)。大ループ・小ループの全長、補正後全長、D、Dc、
+H、垂直部長は `Qfh.dimensions` で取得できる。
+
 ### 分割数の自動決定
 
 `segments` を省略した dipole と、yagi は `core/segmentation.py` で分割数を決める。
