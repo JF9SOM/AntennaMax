@@ -100,3 +100,14 @@ H、垂直部長は `Qfh.dimensions` で取得できる。
 - 細線近似の適用条件(セグメント長/半径 Δ/a < 8)を外れる Wire があると、標準エラー出力に
   `antennamax: warning: ...` を出す(Δ/a < 2 は拡張カーネルでも範囲外の強い警告)。
   `view` ではその Wire を黄色(Δ/a < 8)・赤(Δ/a < 2)で表示する。
+
+## 3D プリント部品(`antennamax parts`)
+
+`antennamax parts design.yaml --out DIR` は、設計から STL と STEP を DIR に出力する(extras `cad`
+が必要: `uv sync --extra cad`)。今は template が `qfh` のものだけ対応し、スプレッダー
+(`qfh_spreader.stl` / `.step`)を出力する。他のテンプレートは「部品未対応」と表示して終了コード 2。
+
+- 寸法は QFH の `dimensions`(大ループ D1・小ループ D2)から取る。導体穴の中心は x 軸上の ±D1/2
+  (大ループ)と y 軸上の ±D2/2(小ループ)、穴径は導体径 + クリアランス、中央穴はマスト外径 + クリアランス。
+- `--clearance-mm`(既定 0.2): 穴・嵌合のクリアランス。`--mast-diameter-mm`(既定 26、VP20 相当)。
+- 部品の寸法は mm の STL/STEP で、内部のパラメータは SI(`*_mm` 表記も可)。

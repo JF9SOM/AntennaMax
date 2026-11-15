@@ -11,13 +11,13 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from antennamax import __version__
+from antennamax.core.optional import MissingExtraError
 from antennamax.core.segmentation import SegmentationError
 from antennamax.core.units import hz_to_mhz
 from antennamax.io.design import DesignError, load_design
 from antennamax.results.result import Result
 from antennamax.solvers.nec2 import Nec2Solver
 from antennamax.solvers.thin_wire import ThinWireWarning
-from antennamax.viz import MissingExtraError
 
 
 @contextmanager
@@ -64,6 +64,16 @@ def _build_parser() -> argparse.ArgumentParser:
     plot = sub.add_parser("plot", help="SWR, R/X and pattern cuts in one figure (matplotlib)")
     plot.add_argument("design", type=Path, help="path to design.yaml")
     plot.add_argument("--save", type=Path, help="write a PNG instead of opening a window")
+
+    parts = sub.add_parser("parts", help="3D-printable parts (STL and STEP) for a design")
+    parts.add_argument("design", type=Path, help="path to design.yaml")
+    parts.add_argument("--out", type=Path, required=True, help="output directory")
+    parts.add_argument(
+        "--clearance-mm", type=float, default=0.2, help="hole/fit clearance in mm (default 0.2)"
+    )
+    parts.add_argument(
+        "--mast-diameter-mm", type=float, help="mast outer diameter in mm (default: VP20, 26 mm)"
+    )
     return parser
 
 
@@ -148,6 +158,35 @@ def _plot(design_path: Path, save: Path | None) -> int:
     return 0
 
 
+def _eprint(message: str) -> None:
+    """Print to stderr; never fail on a console that cannot encode the message."""
+    try:
+        print(message, file=sys.stderr)
+    except UnicodeEncodeError:
+        print(message.encode("ascii", "replace").decode("ascii"), file=sys.stderr)
+
+
+def _parts(design_path: Path, out_dir: Path, clearance_mm: float, mast_mm: float | None) -> int:
+    from antennamax.mech.base import require_cad
+    from antennamax.mech.qfh_spreader import QfhSpreader
+
+    design = load_design(design_path)
+    if design.template_name != "qfh":
+        _eprint(
+            f"antennamax: error: 部品未対応 (no printable parts for template "
+            f"{design.template_name!r}; supported: qfh)"
+        )
+        return 2
+    require_cad()  # fail early with the install hint
+    params: dict = {"qfh": design.template, "print_settings": {"clearance_mm": clearance_mm}}
+    if mast_mm is not None:
+        params["mast_outer_diameter_mm"] = mast_mm
+    spreader = QfhSpreader.model_validate(params)
+    for path in spreader.export(out_dir, "qfh_spreader"):
+        print(f"wrote {path}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
@@ -157,6 +196,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _view(args.design, args.screenshot)
         if args.command == "plot":
             return _plot(args.design, args.save)
+        if args.command == "parts":
+            return _parts(args.design, args.out, args.clearance_mm, args.mast_diameter_mm)
     except (DesignError, SegmentationError, MissingExtraError) as exc:
         print(f"antennamax: error: {exc}", file=sys.stderr)
         return 2
