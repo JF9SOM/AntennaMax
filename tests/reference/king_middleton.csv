@@ -1,0 +1,16 @@
+# King-Middleton 2次近似解 (center-fed cylindrical dipole, total length 2h, radius a).
+# 出典: AN-SOF の記事
+#   https://antennasimulator.com/index.php/knowledge-base/impedance-of-cylindrical-antennas/
+# から転記(二次資料)。原典 R.W.P. King, The Theory of Linear Antennas (1956) とは未照合。
+# omega = 2*ln(2h/a) (thickness parameter), beta_h = (2*pi/lambda)*h.
+# Omega=10 の値は記事内で分割数の記載が矛盾しているため収録しない。
+omega,beta_h,R_ohm,X_ohm
+12.5,1.2,37.134,-185.797
+12.5,1.4,57.384,-60.07
+12.5,1.6,87.655,60.400
+15,1.2,36.742,-244.013
+15,1.4,56.36,-86.012
+15,1.6,85.404,65.397
+20,1.2,36.336,-361.567
+20,1.4,55.248,-138.041
+20,1.6,82.88,74.476
