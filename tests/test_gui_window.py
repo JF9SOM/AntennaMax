@@ -163,4 +163,4 @@ def test_same_look_on_every_os(qtbot):
     apply_look(app)
     assert app.style().objectName().lower() == "fusion"
     assert app.palette().window().color().name() == "#f0f0f0"
-    assert app.font().pointSize() == 10
+    assert app.font().pixelSize() == 16

@@ -1,4 +1,4 @@
-"""One look on every OS: the Fusion style, a fixed light palette and an in-window menu bar.
+"""One look on every OS: Fusion style, fixed light palette, fixed font size, in-window menu bar.
 
 The platform styles (macOS, Windows 11) and the OS dark/light setting would otherwise make the
 window look different on each system. Fonts still come from the OS (only the size is fixed).
@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from PySide6 import QtGui, QtWidgets
 
-FONT_POINT_SIZE = 10
+# In pixels: a point is 1 px on macOS but about 1.33 px on Windows, so points would not match.
+FONT_PIXEL_SIZE = 16
 
 _COLORS = {
     "Window": "#f0f0f0",
@@ -46,5 +47,5 @@ def apply_look(app: QtWidgets.QApplication) -> None:
     app.setStyle("Fusion")
     app.setPalette(light_palette())
     font = app.font()
-    font.setPointSize(FONT_POINT_SIZE)
+    font.setPixelSize(FONT_PIXEL_SIZE)
     app.setFont(font)
