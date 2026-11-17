@@ -33,9 +33,9 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import PositiveFloat, model_validator
+from pydantic import Field, PositiveFloat, model_validator
 
 from antennamax.mech.base import MM, FitProblem, Part, require_cad, to_mm
 from antennamax.mech.fasteners import Fastener, standard_screw_length_mm
@@ -51,6 +51,14 @@ DEFAULT_MAST_OUTER_DIAMETER_M = 0.026
 
 Loop = Literal["large", "small"]
 
+NOTCH_WIDTH_MM = 3.0  # tangential width of the orientation notches
+# Orientation notch at +x on the bottom rim of the hubs and spreaders: radial depth, height.
+ORIENTATION_NOTCH_DEPTH_MM = 1.5
+ORIENTATION_NOTCH_HEIGHT_MM = 2.0
+
+# How far the tip of a mast set screw reaches into the mast hole beyond the inner web.
+MAST_SCREW_PROTRUSION_M = 1.0e-3
+
 
 class QfhHolderParams(SIModel):
     """Parameters common to all QFH support parts (defaults are derived, see the properties)."""
@@ -64,6 +72,13 @@ class QfhHolderParams(SIModel):
     clamp_thickness_m: PositiveFloat | None = None  # default: groove radius + 2 walls
     hub_wall_m: PositiveFloat | None = None  # wall around the mast hole; default: 4 walls
     fastener: Fastener = Fastener()
+    # M3 set screws (grub screws, each with a captive nut) through the wall of the mast hole of
+    # every spreader / hub: they hold it on the mast against turning and sliding. They sit at 45
+    # degrees between the arms, 90 degrees apart.
+    mast_screws_per_part: Annotated[int, Field(ge=1, le=4)] = 2
+    # Drill guide collar (see QfhDrillGuide); defaults are derived from the walls and hole.
+    drill_guide_wall_m: PositiveFloat | None = None  # default: 4 walls
+    drill_guide_height_m: PositiveFloat | None = None  # default: 3 guide-hole diameters
 
 
 class QfhSupportPart(QfhHolderParams, Part):
@@ -123,6 +138,92 @@ class QfhSupportPart(QfhHolderParams, Part):
     def mast_hole_diameter_m(self) -> float:
         return self.print_settings.hole_diameter_m(self.mast_outer_diameter_m)
 
+    # --- mast set screws ------------------------------------------------------------------
+
+    @property
+    def mast_screw_directions_deg(self) -> tuple[float, ...]:
+        """Between the arms (which lie at 0, 90, 180, 270 degrees), 90 degrees apart."""
+        return tuple(45.0 + 90.0 * i for i in range(self.mast_screws_per_part))
+
+    @property
+    def mast_screw_nut_inner_radius_m(self) -> float:
+        """The nut pocket starts a wall outside the mast hole (the web the screw passes)."""
+        return self.mast_hole_diameter_m / 2.0 + self.wall_m
+
+    @property
+    def mast_screw_nut_outer_radius_m(self) -> float:
+        return self.mast_screw_nut_inner_radius_m + self.nut_pocket_depth_m
+
+    @property
+    def mast_screw_min_rim_radius_m(self) -> float:
+        """A wall outside the farthest corner of the nut pocket (its outer face, flat sides)."""
+        far = math.hypot(self.mast_screw_nut_outer_radius_m, self.nut_pocket_across_flats_m / 2.0)
+        return far + self.wall_m
+
+    @property
+    def mast_screw_min_length_m(self) -> float:
+        """From the outer face of the nut: through the nut and the web, a little into the hole."""
+        return self.nut_pocket_depth_m + self.wall_m + MAST_SCREW_PROTRUSION_M
+
+    # --- drill guide collar ---------------------------------------------------------------
+
+    @property
+    def guide_hole_diameter_m(self) -> float:
+        """The conductor passes through the mast: conductor diameter + clearance."""
+        return self.print_settings.hole_diameter_m(self.qfh.diameter_m)
+
+    @property
+    def resolved_drill_guide_wall_m(self) -> float:
+        """Default: thick enough for the nut pocket of the collar's set screw."""
+        default = max(
+            4.0 * self.wall_m, self.mast_screw_min_rim_radius_m - self.mast_hole_diameter_m / 2.0
+        )
+        return self.drill_guide_wall_m or default
+
+    @property
+    def resolved_drill_guide_height_m(self) -> float:
+        return self.drill_guide_height_m or 3.0 * self.guide_hole_diameter_m
+
+    @property
+    def drill_guide_outer_diameter_m(self) -> float:
+        return self.mast_hole_diameter_m + 2.0 * self.resolved_drill_guide_wall_m
+
+    @property
+    def guide_hole_below_top_m(self) -> float:
+        """From the top face of the collar down to the centre of the guide hole."""
+        return self.resolved_drill_guide_height_m / 2.0
+
+    @property
+    def drill_guide_notch_depth_m(self) -> float:
+        """Orientation notch in the top face: leaves a wall above the guide hole."""
+        return self.guide_hole_below_top_m - self.guide_hole_diameter_m / 2.0 - self.wall_m
+
+    @property
+    def drill_guide_screw_direction_deg(self) -> float:
+        """The collar's set screw: 45 degrees from both guide hole axes (0/180 or 90/270 degrees)
+        and well away from the notch at 0 degrees."""
+        return 135.0
+
+    @model_validator(mode="after")
+    def _check_drill_guide(self) -> QfhSupportPart:
+        if self.drill_guide_notch_depth_m < 0.5e-3:
+            raise ValueError(
+                "drill_guide_height_m is too small: the guide hole needs a wall above it and "
+                "room for the orientation notch"
+            )
+        if self.guide_hole_below_top_m < self.nut_pocket_circumradius_m + self.wall_m - 1e-12:
+            raise ValueError(
+                "drill_guide_height_m is too small for the collar's set screw: a wall under the "
+                "nut pocket is needed"
+            )
+        outer = self.drill_guide_outer_diameter_m / 2.0
+        if outer < self.mast_screw_min_rim_radius_m - 1e-12:
+            raise ValueError(
+                "drill_guide_wall_m is too thin for the collar's set screw: the collar radius must "
+                f"be at least {to_mm(self.mast_screw_min_rim_radius_m):.1f} mm"
+            )
+        return self
+
     @model_validator(mode="after")
     def _check_arm_width(self) -> QfhSupportPart:
         if self.resolved_arm_width_m < self.min_arm_width_m - 1e-12:
@@ -142,8 +243,23 @@ class QfhHolderPart(QfhSupportPart):
 
     @property
     def hub_diameter_m(self) -> float:
-        wall = self.hub_wall_m or 4.0 * self.wall_m
+        """Mast hole plus a wall all round; at least thick enough for the set-screw nut pocket."""
+        default = max(
+            4.0 * self.wall_m, self.mast_screw_min_rim_radius_m - self.mast_hole_diameter_m / 2.0
+        )
+        wall = self.hub_wall_m or default
         return self.mast_hole_diameter_m + 2.0 * wall
+
+    @property
+    def mast_screw_axis_depth_m(self) -> float:
+        """Axis of the set screws below the top face: a wall above the screw hole."""
+        return self.screw_hole_diameter_m / 2.0 + self.wall_m
+
+    @property
+    def mast_boss_thickness_m(self) -> float:
+        """The hub is a boss, thicker than the arms where the nut pockets of the set screws are."""
+        pocket_bottom = self.mast_screw_axis_depth_m + self.nut_pocket_circumradius_m + self.wall_m
+        return max(self.resolved_body_thickness_m, pocket_bottom)
 
     # --- along the arms --------------------------------------------------------------------
 
@@ -157,6 +273,11 @@ class QfhHolderPart(QfhSupportPart):
 
     @model_validator(mode="after")
     def _check(self) -> QfhHolderPart:
+        if self.hub_diameter_m / 2.0 < self.mast_screw_min_rim_radius_m - 1e-12:
+            raise ValueError(
+                "hub_wall_m is too thin for the mast set screws: the hub radius must be at least "
+                f"{to_mm(self.mast_screw_min_rim_radius_m):.1f} mm"
+            )
         needed = 2.0 * self.nut_pocket_circumradius_m + 2.0 * self.wall_m
         for loop in ("large", "small"):
             available = self.clamp_length_m(loop)
@@ -189,6 +310,48 @@ def _hex_prism(b: Any, circumradius: float, height: float) -> Any:
     return b.extrude(b.Face(b.Wire.make_polygon(points, close=True)), amount=height)
 
 
+def mast_screw_cut(
+    b: Any,
+    part: QfhSupportPart,
+    axis_z: float,
+    rim_radius: float,
+    angle: float,
+    top_z: float = 0.0,
+) -> Any:
+    """Cut for one mast set screw, pointing radially at `angle` degrees (millimetres).
+
+    A screw hole from the mast hole out through the rim, a hex pocket for the nut (axis radial,
+    corners up and down, a wall out from the mast hole) and a slot above the pocket, open to the
+    top face, through which the nut is dropped in.
+    """
+    mast_r = to_mm(part.mast_hole_diameter_m) / 2.0
+    pocket_start = to_mm(part.mast_screw_nut_inner_radius_m)
+    depth = to_mm(part.nut_pocket_depth_m)
+    screw_r = to_mm(part.screw_hole_diameter_m) / 2.0
+    pocket_r = to_mm(part.nut_pocket_circumradius_m)
+    flats = to_mm(part.nut_pocket_across_flats_m)
+    x0, x1 = mast_r - 1.0, rim_radius + 1.0
+    hole = b.Pos((x0 + x1) / 2.0, 0, axis_z) * (b.Rot(0, 90, 0) * b.Cylinder(screw_r, x1 - x0))
+    pocket = b.Pos(pocket_start, 0, axis_z) * (b.Rot(0, 90, 0) * _hex_prism(b, pocket_r, depth))
+    top = top_z + 1.0  # the slot runs out of the top face
+    slot = b.Pos(pocket_start + depth / 2.0, 0, (axis_z + top) / 2.0) * b.Box(
+        depth, flats, top - axis_z
+    )
+    return b.Rot(0, 0, angle) * (hole + pocket + slot)
+
+
+def orientation_notch_cut(b: Any, rim_radius: float, bottom_z: float) -> Any:
+    """Notch in the bottom edge of the rim at +x (millimetres).
+
+    +x is the direction of the upper spreader's +x arm, a large-loop arm: the lower and upper
+    parts and the drill guide collars are all turned so that their +x marks point the same way.
+    """
+    depth, height = ORIENTATION_NOTCH_DEPTH_MM, ORIENTATION_NOTCH_HEIGHT_MM
+    x0, x1 = rim_radius - depth, rim_radius + 1.0
+    z0, z1 = bottom_z - 1.0, bottom_z + height
+    return b.Pos((x0 + x1) / 2.0, 0, (z0 + z1) / 2.0) * b.Box(x1 - x0, NOTCH_WIDTH_MM, z1 - z0)
+
+
 # --- parts ---------------------------------------------------------------------------------
 
 
@@ -211,13 +374,21 @@ class _Spreader(QfhHolderPart):
         pocket_depth = to_mm(self.nut_pocket_depth_m)
         y_screw = to_mm(self.screw_offset_m)
 
-        # z from -t to 0; the top face (z = 0) is the conductor plane.
-        body = b.Pos(0, 0, -t / 2) * b.Cylinder(hub_r, t)
+        # z from -t to 0; the top face (z = 0) is the conductor plane. The hub is a boss, thicker
+        # than the arms, so that the set screws' nut pockets keep their walls.
+        boss = to_mm(self.mast_boss_thickness_m)
+        body = b.Pos(0, 0, -boss / 2) * b.Cylinder(hub_r, boss)
         for axis, loop in arms:
             length = 2.0 * to_mm(self.loop_half_length_m(loop))
             box = b.Box(length, width, t)
             body = body + b.Pos(0, 0, -t / 2) * (box if axis == "x" else b.Rot(0, 0, 90) * box)
-        body = body - b.Pos(0, 0, -t / 2) * b.Cylinder(mast_r, 2 * t)
+        body = body - b.Pos(0, 0, -t / 2) * b.Cylinder(mast_r, 2 * boss)
+        for angle in self.mast_screw_directions_deg:
+            body = body - mast_screw_cut(
+                b, self, -to_mm(self.mast_screw_axis_depth_m), hub_r, angle
+            )
+        # Orientation mark: a notch in the bottom edge of the hub at +x (the large-loop arm side).
+        body = body - orientation_notch_cut(b, hub_r, -boss)
         for axis, loop in arms:
             length = 2.0 * to_mm(self.loop_half_length_m(loop)) + 2.0
             groove = _groove(b, groove_r, length)
@@ -285,6 +456,81 @@ class QfhClamp(QfhHolderPart):
         return plate
 
 
+class QfhDrillGuide(QfhSupportPart):
+    """Drill guide collar: a ring for the mast that shows where the lower conductor goes through.
+
+    The lower horizontal conductor of each loop passes straight through the mast, H1 (large loop)
+    and H2 (small loop) below the top of the antenna, in directions 90 degrees apart. The collar
+    is slid onto the mast, its top face placed at (H - top face to hole centre) from the top; the
+    guide hole through the wall is then drilled through, across the mast's diameter, with the
+    mast's own drill bit. The hole is the conductor diameter plus clearance.
+
+    Orientation: both collars have a notch in the top face at +x, the direction of the upper
+    spreader's +x arm (a large-loop arm). The large collar's guide holes lie along x, in line
+    with the notch (the large loop's conductor is parallel to the +-x arms); the small collar's
+    lie along y, 90 degrees from the notch, in line with the +-y arms (small loop). Turn both
+    collars so that the notches face the upper spreader's +x arm.
+
+    The collar is modelled with the centre of the guide hole at z = 0; its top face is
+    `guide_hole_below_top_m` above that.
+    TODO(要確認): カラーのマストへの固定(はめあいの摩擦のみ。テープ等で仮止めする想定)は未設計。
+    """
+
+    loop: Loop
+
+    @property
+    def part_name(self) -> str:
+        return f"qfh_drill_guide_{self.loop}"
+
+    @property
+    def distance_from_top_m(self) -> float:
+        """The guide hole's distance from the top of the antenna: H1 or H2."""
+        dims = self.qfh.dimensions
+        return (dims.large if self.loop == "large" else dims.small).height_m
+
+    @property
+    def collar_top_from_top_m(self) -> float:
+        """Where the top face of the collar goes: the hole's distance from the top, less the
+        distance from the top face to the hole centre."""
+        return self.distance_from_top_m - self.guide_hole_below_top_m
+
+    def build(self) -> Any:
+        b = require_cad()
+        height = to_mm(self.resolved_drill_guide_height_m)
+        inner_r = to_mm(self.mast_hole_diameter_m) / 2.0
+        outer_r = to_mm(self.drill_guide_outer_diameter_m) / 2.0
+        hole_r = to_mm(self.guide_hole_diameter_m) / 2.0
+        notch_depth = to_mm(self.drill_guide_notch_depth_m)
+        wall = to_mm(self.resolved_drill_guide_wall_m)
+
+        collar = b.Cylinder(outer_r, height) - b.Cylinder(inner_r, 2 * height)
+        # The guide hole: across the whole collar and the mast, along x (large) or y (small).
+        axis = b.Rot(0, 90, 0) if self.loop == "large" else b.Rot(90, 0, 0)
+        collar = collar - axis * b.Cylinder(hole_r, 2 * outer_r + 2.0)
+        # Orientation notch at +x in the top face, across the wall.
+        notch_z = height / 2.0 - notch_depth
+        notch = b.Pos((inner_r + outer_r) / 2.0, 0, notch_z + (notch_depth + 1.0) / 2.0) * b.Box(
+            wall + 1.0, NOTCH_WIDTH_MM, notch_depth + 1.0
+        )
+        collar = collar - notch
+        # One M3 set screw holds the collar on the mast (same scheme as the hubs'), clear of the
+        # guide hole and the notch.
+        return collar - mast_screw_cut(
+            b, self, 0.0, outer_r, self.drill_guide_screw_direction_deg, top_z=height / 2.0
+        )
+
+
+@dataclass(frozen=True)
+class DrillGuideInfo:
+    """Where to put a drill guide collar on the mast."""
+
+    loop: str
+    hole_from_top_m: float  # distance of the guide hole's centre from the top of the antenna
+    top_face_to_hole_m: float  # the collar's reference dimension
+    collar_top_from_top_m: float  # where the collar's top face goes
+    hole_diameter_m: float
+
+
 # --- the set ---------------------------------------------------------------------------------
 
 
@@ -350,6 +596,24 @@ def part_rows(part_set: Any) -> list[PartRow]:
     return [PartRow(n, s, groups[(n, s)][0], groups[(n, s)][1], sizes[n]) for n, s in keys]
 
 
+def drill_guide_info(part_set: Any) -> list[DrillGuideInfo]:
+    """The drill guide collars of a part set: where each guide hole is and where the collar goes."""
+    out = []
+    for instance in part_set.instances():
+        part = instance.part
+        if isinstance(part, QfhDrillGuide):
+            out.append(
+                DrillGuideInfo(
+                    part.loop,
+                    part.distance_from_top_m,
+                    part.guide_hole_below_top_m,
+                    part.collar_top_from_top_m,
+                    part.guide_hole_diameter_m,
+                )
+            )
+    return out
+
+
 @dataclass(frozen=True)
 class PartInstance:
     name: str
@@ -402,6 +666,9 @@ class QfhPartSet(QfhHolderPart):
     def clamp(self, loop: Loop) -> QfhClamp:
         return QfhClamp(loop=loop, **self._common())
 
+    def drill_guide(self, loop: Loop) -> QfhDrillGuide:
+        return QfhDrillGuide(loop=loop, **self._common())
+
     def instances(self) -> list[PartInstance]:
         """The distinct parts and how many of each are needed."""
         return [
@@ -410,6 +677,8 @@ class QfhPartSet(QfhHolderPart):
             PartInstance("qfh_lower_spreader_small", 1, self.lower("small")),
             PartInstance("qfh_clamp_large", 4, self.clamp("large")),
             PartInstance("qfh_clamp_small", 4, self.clamp("small")),
+            PartInstance("qfh_drill_guide_large", 1, self.drill_guide("large")),
+            PartInstance("qfh_drill_guide_small", 1, self.drill_guide("small")),
         ]
 
     def placements(self) -> list[Placement]:
@@ -445,6 +714,13 @@ class QfhPartSet(QfhHolderPart):
         for site, z in (("upper", 0.0), ("lower_small", z_lower_small)):
             for sign in (1.0, -1.0):
                 out.append(Placement(small.part_name, small, (0.0, sign * cs, z), 90.0, site))
+        for loop, site in (("large", "lower_large"), ("small", "lower_small")):
+            guide = self.drill_guide(loop)
+            out.append(
+                Placement(
+                    guide.part_name, guide, (0.0, 0.0, -to_mm(guide.distance_from_top_m)), 0.0, site
+                )
+            )
         return out
 
     def rods(self) -> list[Rod]:
@@ -452,7 +728,23 @@ class QfhPartSet(QfhHolderPart):
         return []
 
     def fasteners(self) -> list[FastenerUse]:
-        return [FastenerUse("clamp plates", self.screw_count, self.min_screw_length_m)]
+        return [
+            FastenerUse(
+                "clamp plates",
+                self.clamp_count * self.fastener.screws_per_clamp,
+                self.min_screw_length_m,
+            ),
+            FastenerUse("mast set screws", self.mast_screw_count, self.mast_screw_min_length_m),
+            FastenerUse("drill guide set screws", 2, self.mast_screw_min_length_m),
+        ]
+
+    @property
+    def mast_screw_count(self) -> int:
+        """Set screws in the mast holes: the upper spreader and the two lower bars."""
+        return 3 * self.mast_screws_per_part
+
+    def drill_guides(self) -> list[DrillGuideInfo]:
+        return drill_guide_info(self)
 
     def fit_problems(self) -> list[FitProblem]:
         """Printed parts that exceed the build volume."""
@@ -469,7 +761,7 @@ class QfhPartSet(QfhHolderPart):
 
     @property
     def screw_count(self) -> int:
-        return self.clamp_count * self.fastener.screws_per_clamp
+        return sum(f.screws for f in self.fasteners())
 
     @property
     def nut_count(self) -> int:

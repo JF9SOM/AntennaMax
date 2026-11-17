@@ -46,7 +46,7 @@ def test_auto_chooses_hub_rod_at_137mhz_and_everything_fits():
         assert max(size[:2]) <= to_mm(max(bed[:2])) and size[2] <= to_mm(bed[2]), instance.name
 
 
-def test_auto_chooses_integrated_at_435mhz_with_the_same_parts_as_before():
+def test_auto_chooses_integrated_at_435mhz():
     need_cad()
     plan = plan_supports(qfh(435.0))
     assert plan.mode == "integrated" and isinstance(plan.part_set, QfhPartSet)
@@ -58,10 +58,14 @@ def test_auto_chooses_integrated_at_435mhz_with_the_same_parts_as_before():
         "qfh_lower_spreader_small",
         "qfh_clamp_large",
         "qfh_clamp_small",
+        "qfh_drill_guide_large",
+        "qfh_drill_guide_small",
     ]
-    # Unchanged from the integrated design (see tests/test_mech.py and the earlier listing).
-    assert sizes["qfh_upper_spreader"] == pytest.approx((91.1, 86.1, 5.0), abs=0.05)
-    assert sizes["qfh_clamp_large"] == pytest.approx((27.7, 19.4, 4.0), abs=0.05)
+    # The spreaders and clamps of the integrated design (the hub is now a boss for the mast set
+    # screws, 7.3 mm thick, and its wall a little thicker, which shortens the clamps).
+    assert sizes["qfh_upper_spreader"] == pytest.approx((91.11, 86.15, 7.29), abs=0.05)
+    assert sizes["qfh_clamp_large"] == pytest.approx((27.22, 19.4, 4.0), abs=0.05)
+    assert sizes["qfh_drill_guide_large"] == pytest.approx((36.68, 36.68, 9.6), abs=0.05)
 
 
 def test_explicit_modes_override_auto():
@@ -147,8 +151,10 @@ def test_part_list_counts_heights_and_fasteners():
         "qfh_fixture",
         "qfh_hub_clamp",
         "qfh_fixture_clamp",
+        "qfh_drill_guide_large",
+        "qfh_drill_guide_small",
     ]
-    assert [by_name[n].count for n in by_name] == [1, 1, 1, 8, 8, 8]
+    assert [by_name[n].count for n in by_name] == [1, 1, 1, 8, 8, 8, 1, 1]
     assert by_name["qfh_hub_upper"].distance_from_top_m == 0.0
     assert by_name["qfh_hub_lower_large"].distance_from_top_m == pytest.approx(dims.large.height_m)
     assert by_name["qfh_hub_lower_small"].distance_from_top_m == pytest.approx(dims.small.height_m)
@@ -157,8 +163,10 @@ def test_part_list_counts_heights_and_fasteners():
     assert uses["fixture clamp plates"].screws == 16
     assert uses["rod retention (hub)"].screws == 8  # one per rod socket: 4 + 2 + 2
     assert uses["rod fixing (fixture)"].screws == 8  # one per fixture
+    assert uses["mast set screws"].screws == 6  # two in the mast hole of each hub
+    assert uses["drill guide set screws"].screws == 2  # one in each drill guide collar
     assert s.clamp_count == 16
-    assert s.screw_count == s.nut_count == 48
+    assert s.screw_count == s.nut_count == 56
     thickness = s.resolved_clamp_thickness_m
     assert uses["hub clamp plates"].min_length_m == pytest.approx(thickness + s.hub_height_m)
     assert uses["fixture clamp plates"].min_length_m == pytest.approx(
@@ -172,7 +180,7 @@ def test_placements_follow_the_installation_heights():
     s = hubrod()
     dims = s.qfh.dimensions
     placements = s.placements()
-    assert len(placements) == 3 + 8 + 8 + 8  # hubs, hub clamps, fixtures, fixture clamps
+    assert len(placements) == 3 + 8 + 8 + 8 + 2  # hubs, three kinds of clamp/fixture, two guides
     hubs = {
         p.name: p.position_mm[2]
         for p in placements
@@ -485,6 +493,8 @@ def test_no_printed_part_reaches_beyond_dc_over_2():
             # on the hub: the plate's corners meet the rim, nothing sticks out
             assert extent == pytest.approx(to_mm(s.hub_clamp_outer_radius_m), abs=1e-3)
             assert extent <= to_mm(s.hub_radius_m)
+        elif "drill_guide" in placement.name:  # on the mast, not on an arm
+            assert extent == pytest.approx(to_mm(s.drill_guide_outer_diameter_m) / 2, abs=1e-3)
         elif "hub" in placement.name:
             assert extent == pytest.approx(to_mm(s.hub_radius_m), abs=1e-3)
         else:
@@ -536,7 +546,9 @@ def test_cli_137mhz_uses_hub_rod_without_warnings_and_lists_everything(tmp_path,
     assert (
         "rod retention (hub): 8 x M3 screws" in out and "rod fixing (fixture): 8 x M3 screws" in out
     )
-    assert "total: 48 x M3 screws, 48 x M3 hex nuts" in out
+    assert "mast set screws: 6 x M3 screws" in out
+    assert "drill guide set screws: 2 x M3 screws" in out
+    assert "total: 56 x M3 screws, 56 x M3 hex nuts" in out
     rows = parse_listing(out)
     for kind in ("qfh_hub_clamp", "qfh_fixture_clamp"):
         assert sum(q for n, _, q, _ in rows if n == kind) == 8  # two kinds, eight of each
@@ -594,6 +606,10 @@ def test_listing_rows_of_the_hub_rod_set_follow_h1_h2():
             (kind, "lower_large", 2, pytest.approx(h1)),
             (kind, "lower_small", 2, pytest.approx(h2)),
         ]
+    expected += [  # the drill guides: the guide hole's distance from the top
+        ("qfh_drill_guide_large", "lower_large", 1, pytest.approx(h1)),
+        ("qfh_drill_guide_small", "lower_small", 1, pytest.approx(h2)),
+    ]
     assert rows == expected
 
 
@@ -603,9 +619,9 @@ def test_hub_rod_listing_totals_match_the_part_list_and_the_fasteners():
     rows = part_rows(s)
     for instance in s.instances():
         assert sum(r.count for r in rows if r.name == instance.name) == instance.count
-    assert sum(r.count for r in rows) == 27
-    assert s.screw_count == s.nut_count == 48  # unchanged by how the rows are grouped
-    assert len(rows) == 12
+    assert sum(r.count for r in rows) == 29  # 27 hubs/fixtures/clamps + two drill guides
+    assert s.screw_count == s.nut_count == 56  # 48 + 6 in the mast holes + 2 in the collars
+    assert len(rows) == 14
 
 
 def test_cli_listing_matches_the_dimensions_for_137mhz(tmp_path, capsys):
@@ -616,13 +632,13 @@ def test_cli_listing_matches_the_dimensions_for_137mhz(tmp_path, capsys):
     h1, h2 = round(to_mm(dims.large.height_m), 1), round(to_mm(dims.small.height_m), 1)
     assert (h1, h2) == (726.6, 690.9)
     rows = parse_listing(out)
-    assert len(rows) == 12 and sum(q for _, _, q, _ in rows) == 27
+    assert len(rows) == 14 and sum(q for _, _, q, _ in rows) == 29
     for kind in ("qfh_fixture", "qfh_hub_clamp", "qfh_fixture_clamp"):
         assert [(s, q, d) for n, s, q, d in rows if n == kind] == [
             ("upper", 4, 0.0),
             ("lower_large", 2, h1),
             ("lower_small", 2, h2),
         ]
-    assert "Printed parts: 27 pieces" in out
-    assert "total: 48 x M3 screws, 48 x M3 hex nuts" in out
+    assert "Printed parts: 29 pieces" in out
+    assert "total: 56 x M3 screws, 56 x M3 hex nuts" in out
     assert "-0.0" not in out

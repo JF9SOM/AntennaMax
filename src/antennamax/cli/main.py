@@ -236,6 +236,10 @@ def _parts(args: argparse.Namespace) -> int:
         _eprint(f"antennamax: warning: {problem.message()}")
 
     print(f"Support: {plan.mode} ({plan.reason})")
+    print(
+        "From top = distance below the top conductor plane "
+        "(the groove plane of the upper spreader / hub)"
+    )
     print(f"{'Part':<26} {'Site':<12} {'Qty':>3} {'From top[mm]':>13}   Size x y z [mm]")
     pieces = 0
     for row in part_rows(part_set):
@@ -247,6 +251,24 @@ def _parts(args: argparse.Namespace) -> int:
         )
         pieces += row.count
     print(f"Printed parts: {pieces} pieces")
+    guides = part_set.drill_guides()
+    if guides:
+        hole = to_mm(guides[0].hole_diameter_m)
+        print(f"Drill guides (collars on the mast; drill through both {hole:.1f} mm guide holes):")
+        print("  (From top = below the top conductor plane, the same reference as in the table)")
+        for g in guides:
+            hole_top = _distance_mm(g.hole_from_top_m)
+            collar_top = _distance_mm(g.collar_top_from_top_m)
+            above = _distance_mm(g.top_face_to_hole_m)
+            print(
+                f"  {g.loop} loop: guide hole at {hole_top:.1f} mm From top; "
+                f"collar top face at {collar_top:.1f} mm From top ({above:.1f} mm above the hole)"
+            )
+        print("  Turn the collars so that their top-face notch faces the upper spreader's +x arm.")
+        print(
+            "  The upper spreader / hubs carry a notch at +x in the bottom edge of the rim: "
+            "the x axis is the large loop."
+        )
     rods = part_set.rods()
     if rods:
         print(f"Rods (not printed, {to_mm(rods[0].diameter_m):g} mm diameter):")

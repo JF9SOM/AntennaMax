@@ -45,14 +45,20 @@ from pydantic import PositiveFloat, model_validator
 
 from antennamax.mech.base import FitProblem, require_cad, to_mm
 from antennamax.mech.qfh_parts import (
+    DrillGuideInfo,
     FastenerUse,
     Loop,
     PartInstance,
     Placement,
+    QfhDrillGuide,
+    QfhHolderParams,
     QfhSupportPart,
     Rod,
     _groove,
     _hex_prism,
+    drill_guide_info,
+    mast_screw_cut,
+    orientation_notch_cut,
 )
 
 DEFAULT_ROD_DIAMETER_M = 0.008  # a commonly available size; provisional
@@ -215,6 +221,8 @@ class QfhHubRodPart(QfhSupportPart):
                     f"of rod between hub and fixture, at least {to_mm(minimum):.1f} mm needed "
                     "(use the integrated spreaders, a smaller mast or a shallower insertion)"
                 )
+        if self.hub_radius_m < self.mast_screw_min_rim_radius_m - 1e-12:
+            raise ValueError("the hub is too small for the mast set screws' nut pockets")
         needed = 2.0 * self.nut_pocket_circumradius_m + 2.0 * self.wall_m
         if self.hub_clamp_length_m < needed:
             raise ValueError(
@@ -299,6 +307,13 @@ class QfhHub(QfhHubRodPart):
             # The groove runs across the whole hub and over the mast hole.
             groove = _groove(b, groove_r, 2.0 * radius + 2.0)
             hub = hub - b.Rot(0, 0, self.directions_deg[0]) * groove
+
+        # The mast set screws, between the arms, at mid-height (well clear of the recess above).
+        for angle in self.mast_screw_directions_deg:
+            hub = hub - mast_screw_cut(b, self, -height / 2.0, radius, angle)
+        # Orientation mark: a notch in the bottom edge of the rim at +x, the direction of the
+        # large-loop sockets (the x axis); the sockets along +-y are the small loop's.
+        hub = hub - orientation_notch_cut(b, radius, -height)
 
         socket_length = radius + 1.0 - socket_bottom
         for angle in self.directions_deg:
@@ -444,6 +459,10 @@ class QfhHubRodPartSet(QfhHubRodPart):
     def clamp(self) -> QfhFixtureClamp:
         return QfhFixtureClamp(**self._common())
 
+    def drill_guide(self, loop: Loop) -> QfhDrillGuide:
+        params = {name: getattr(self, name) for name in QfhHolderParams.model_fields}
+        return QfhDrillGuide(loop=loop, print_settings=self.print_settings, **params)
+
     def instances(self) -> list[PartInstance]:
         return [
             PartInstance("qfh_hub_upper", 1, self.hub("upper")),
@@ -452,6 +471,8 @@ class QfhHubRodPartSet(QfhHubRodPart):
             PartInstance("qfh_fixture", 8, self.fixture()),
             PartInstance("qfh_hub_clamp", 8, self.hub_clamp()),
             PartInstance("qfh_fixture_clamp", 8, self.clamp()),
+            PartInstance("qfh_drill_guide_large", 1, self.drill_guide("large")),
+            PartInstance("qfh_drill_guide_small", 1, self.drill_guide("small")),
         ]
 
     def _arms(self) -> list[tuple[HubKind, Loop, float]]:
@@ -486,6 +507,13 @@ class QfhHubRodPartSet(QfhHubRodPart):
             r = to_mm(self.fixture_center_radius_m(loop))
             out.append(Placement(fixture.part_name, fixture, (r * ux, r * uy, z), angle, kind))
             out.append(Placement(clamp.part_name, clamp, (r * ux, r * uy, z), angle, kind))
+        for loop, site in (("large", "lower_large"), ("small", "lower_small")):
+            guide = self.drill_guide(loop)
+            out.append(
+                Placement(
+                    guide.part_name, guide, (0.0, 0.0, -to_mm(guide.distance_from_top_m)), 0.0, site
+                )
+            )
         return out
 
     def rod_placements(self) -> list[RodPlacement]:
@@ -535,7 +563,17 @@ class QfhHubRodPartSet(QfhHubRodPart):
             ),
             FastenerUse("rod retention (hub)", self.arm_count, self.retention_screw_min_length_m),
             FastenerUse("rod fixing (fixture)", self.arm_count, self.retention_screw_min_length_m),
+            FastenerUse("mast set screws", self.mast_screw_count, self.mast_screw_min_length_m),
+            FastenerUse("drill guide set screws", 2, self.mast_screw_min_length_m),
         ]
+
+    @property
+    def mast_screw_count(self) -> int:
+        """Set screws in the mast holes of the three hubs."""
+        return 3 * self.mast_screws_per_part
+
+    def drill_guides(self) -> list[DrillGuideInfo]:
+        return drill_guide_info(self)
 
     @property
     def screw_count(self) -> int:

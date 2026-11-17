@@ -95,8 +95,10 @@ def test_part_list_counts_and_installation_heights():
         "qfh_lower_spreader_small",
         "qfh_clamp_large",
         "qfh_clamp_small",
+        "qfh_drill_guide_large",
+        "qfh_drill_guide_small",
     ]
-    assert [by_name[n].count for n in by_name] == [1, 1, 1, 4, 4]
+    assert [by_name[n].count for n in by_name] == [1, 1, 1, 4, 4, 1, 1]
     # Distance from the top of the antenna: the top spreader at 0, the bottom bars at the loop
     # heights (the loops are aligned at the top, so the small loop's bottom is H2 below it).
     assert by_name["qfh_upper_spreader"].distance_from_top_m == 0.0
@@ -106,6 +108,12 @@ def test_part_list_counts_and_installation_heights():
     assert by_name["qfh_lower_spreader_small"].distance_from_top_m == pytest.approx(
         dims.small.height_m
     )
+    assert by_name["qfh_drill_guide_large"].distance_from_top_m == pytest.approx(
+        dims.large.height_m
+    )
+    assert by_name["qfh_drill_guide_small"].distance_from_top_m == pytest.approx(
+        dims.small.height_m
+    )
     assert dims.large.height_m > dims.small.height_m > 0
     assert all(i.part.part_name == i.name for i in by_name.values())
 
@@ -113,7 +121,13 @@ def test_part_list_counts_and_installation_heights():
 def test_fastener_counts():
     s = parts()
     assert s.clamp_count == 8
-    assert s.screw_count == 16 and s.nut_count == 16  # two M3 screws and nuts per clamp
+    uses = {u.purpose: u for u in s.fasteners()}
+    assert uses["clamp plates"].screws == 16  # two M3 screws and nuts per clamp
+    assert uses["mast set screws"].screws == 6  # two in each of the three mast holes
+    assert uses["drill guide set screws"].screws == 2  # one in each drill guide collar
+    assert s.screw_count == s.nut_count == 24
+    assert uses["mast set screws"].min_length_m == pytest.approx(0.0048)
+    assert uses["mast set screws"].screw_length_mm == 6
     thickness = s.resolved_clamp_thickness_m + s.resolved_body_thickness_m
     assert s.min_screw_length_m == pytest.approx(thickness)
     assert s.screw_length_mm == standard_screw_length_mm(to_mm(thickness)) == 10
@@ -124,7 +138,7 @@ def test_placements_match_the_installation_heights():
     s = parts()
     dims = s.qfh.dimensions
     placements = s.placements()
-    assert len(placements) == 1 + 2 + 8  # one upper, two lower, eight clamps
+    assert len(placements) == 1 + 2 + 8 + 2  # one upper, two lower, eight clamps, two guides
     z = {p.name: p.position_mm[2] for p in placements if "spreader" in p.name}
     assert z["qfh_upper_spreader"] == 0.0
     assert z["qfh_lower_spreader_large"] == pytest.approx(-to_mm(dims.large.height_m))
@@ -190,11 +204,13 @@ def test_part_sizes_match_dc_of_each_loop():
     hub = to_mm(s.hub_diameter_m)
     width = to_mm(s.resolved_arm_width_m)
     got = sizes(s)
-    tb, tc = to_mm(s.resolved_body_thickness_m), to_mm(s.resolved_clamp_thickness_m)
+    # The arms are body-thick, the hub is a boss, thicker where the set screws' nut pockets are.
+    boss, tc = to_mm(s.mast_boss_thickness_m), to_mm(s.resolved_clamp_thickness_m)
+    assert boss > to_mm(s.resolved_body_thickness_m)
     # The upper spreader spans Dc1 along x and Dc2 along y: grooves and arms stop at Dc/2.
-    assert got["qfh_upper_spreader"] == pytest.approx((dc1, dc2, tb), abs=1e-3)
-    assert got["qfh_lower_spreader_large"] == pytest.approx((dc1, max(hub, width), tb), abs=1e-3)
-    assert got["qfh_lower_spreader_small"] == pytest.approx((max(hub, width), dc2, tb), abs=1e-3)
+    assert got["qfh_upper_spreader"] == pytest.approx((dc1, dc2, boss), abs=1e-3)
+    assert got["qfh_lower_spreader_large"] == pytest.approx((dc1, max(hub, width), boss), abs=1e-3)
+    assert got["qfh_lower_spreader_small"] == pytest.approx((max(hub, width), dc2, boss), abs=1e-3)
     # A clamp runs from the edge of the hub to Dc/2.
     assert got["qfh_clamp_large"] == pytest.approx((dc1 / 2 - hub / 2, width, tc), abs=1e-3)
     assert got["qfh_clamp_small"] == pytest.approx((dc2 / 2 - hub / 2, width, tc), abs=1e-3)
@@ -361,7 +377,7 @@ def test_export_creates_the_output_directory(tmp_path):
 def test_435mhz_parts_fit_the_default_build_volume():
     need_cad()
     s = parts(435.0)
-    assert [s.print_settings.check_fit(n, size) for n, size in sizes(s).items()] == [None] * 5
+    assert [s.print_settings.check_fit(n, size) for n, size in sizes(s).items()] == [None] * 7
 
 
 def test_137mhz_parts_exceed_the_build_volume():
@@ -493,6 +509,8 @@ def test_listing_rows_of_the_integrated_set_follow_h1_h2():
         ("qfh_clamp_large", "lower_large", 2, pytest.approx(h1)),  # ... two on the lower bar
         ("qfh_clamp_small", "upper", 2, 0.0),
         ("qfh_clamp_small", "lower_small", 2, pytest.approx(h2)),
+        ("qfh_drill_guide_large", "lower_large", 1, pytest.approx(h1)),
+        ("qfh_drill_guide_small", "lower_small", 1, pytest.approx(h2)),
     ]
 
 
@@ -506,8 +524,9 @@ def test_listing_totals_match_the_part_list_and_the_fasteners():
     rows = part_rows_of(s)
     for instance in s.instances():
         assert sum(r.count for r in rows if r.name == instance.name) == instance.count
-    assert sum(r.count for r in rows) == 11
-    assert s.screw_count == s.nut_count == 16  # unchanged by how the rows are grouped
+    assert sum(r.count for r in rows) == 13  # 11 spreaders and clamps + two drill guides
+    # 16 for the clamps + 6 in the mast holes + 2 in the drill guide collars
+    assert s.screw_count == s.nut_count == 24
 
 
 def test_cli_listing_shows_the_sites_and_heights_of_the_integrated_parts(tmp_path, capsys):
@@ -524,8 +543,10 @@ def test_cli_listing_shows_the_sites_and_heights_of_the_integrated_parts(tmp_pat
         ("qfh_clamp_large", "lower_large", 2, h1),
         ("qfh_clamp_small", "upper", 2, 0.0),
         ("qfh_clamp_small", "lower_small", 2, h2),
+        ("qfh_drill_guide_large", "lower_large", 1, h1),
+        ("qfh_drill_guide_small", "lower_small", 1, h2),
     ]
-    assert "Printed parts: 11 pieces" in out
+    assert "Printed parts: 13 pieces" in out
     assert "-0.0" not in out
 
 
