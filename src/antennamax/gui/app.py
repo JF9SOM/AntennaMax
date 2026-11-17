@@ -17,6 +17,15 @@ def has_display() -> bool:
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
+def window_icon():
+    """The application icon (SVG shipped with the package), or None if Qt cannot load it."""
+    from PySide6 import QtGui
+
+    path = Path(__file__).parent / "resources" / "icon.svg"
+    icon = QtGui.QIcon(str(path))
+    return None if icon.isNull() else icon
+
+
 def run_gui(design_path: Path | None = None) -> int:
     """Open the main window (with `design_path` loaded and calculated) and run until closed."""
     require("PySide6.QtWidgets", "start the GUI", extra="gui")
@@ -32,6 +41,9 @@ def run_gui(design_path: Path | None = None) -> int:
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv[:1])
     app.setApplicationName("AntennaMax")
+    icon = window_icon()
+    if icon is not None:
+        app.setWindowIcon(icon)
     window = MainWindow(design_path)
     window.show()
     return app.exec()
