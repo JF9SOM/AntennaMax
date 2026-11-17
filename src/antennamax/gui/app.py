@@ -35,17 +35,19 @@ def run_gui(design_path: Path | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
 
     from antennamax.gui.theme import apply_look
     from antennamax.gui.window import MainWindow
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv[:1])
     app.setApplicationName("AntennaMax")
-    apply_look(app)
+    saved = QtCore.QSettings("AntennaMax", "AntennaMax").value("theme", "light")
+    theme = saved if saved in ("light", "dark") else "light"
+    apply_look(app, theme)
     icon = window_icon()
     if icon is not None:
         app.setWindowIcon(icon)
-    window = MainWindow(design_path)
+    window = MainWindow(design_path, theme=theme, persist_theme=True)
     window.show()
     return app.exec()

@@ -72,8 +72,12 @@ class MainWindow(QtWidgets.QMainWindow):
         use_3d: bool | None = None,
         backend: str | None = None,
         auto_calculate: bool = True,
+        theme: str = "light",
+        persist_theme: bool = False,
     ) -> None:
         super().__init__()
+        self.theme = theme
+        self._persist_theme = persist_theme
         self.setWindowTitle("AntennaMax")
         self.resize(1400, 850)
         if use_3d is None:
@@ -129,6 +133,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.scene = Scene3D(enabled=use_3d)
         self.impedance_view = MplView(plot2d.draw_impedance)
         self.pattern_view = MplView(plot2d.draw_patterns)
+        for view in (self.impedance_view, self.pattern_view, self.scene):
+            view.theme = self.theme
         self.summary = SummaryView()
         self.warnings = WarningsView()
         self.tabs = QtWidgets.QTabWidget()
@@ -174,12 +180,35 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         file_menu.addSeparator()
         file_menu.addAction("&Quit", self.close).setShortcut(QtGui.QKeySequence.Quit)
+        view_menu = self.menuBar().addMenu("&View")
+        group = QtGui.QActionGroup(self)
+        self.theme_actions: dict[str, QtGui.QAction] = {}
+        for name, label in (("light", "&Light"), ("dark", "&Dark")):
+            action = view_menu.addAction(label, lambda n=name: self.set_theme(n))
+            action.setCheckable(True)
+            action.setChecked(name == self.theme)
+            group.addAction(action)
+            self.theme_actions[name] = action
         design_menu = self.menuBar().addMenu("&Design")
         calc = design_menu.addAction("&Calculate", self.calculate)
         calc.setShortcut(QtGui.QKeySequence("F5"))
         help_menu = self.menuBar().addMenu("&Help")
         help_menu.addAction("&About", self._about)
         self._update_menu_state()
+
+    def set_theme(self, theme: str) -> None:
+        """Switch between the light and the dark look (window, plots and 3D view)."""
+        from antennamax.gui.theme import apply_look
+
+        self.theme = theme
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            apply_look(app, theme)
+        for view in (self.impedance_view, self.pattern_view, self.scene):
+            view.set_theme(theme)
+        self.theme_actions[theme].setChecked(True)
+        if self._persist_theme:
+            QtCore.QSettings("AntennaMax", "AntennaMax").setValue("theme", theme)
 
     def _update_menu_state(self) -> None:
         self.json_action.setEnabled(self.run is not None)

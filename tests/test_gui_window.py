@@ -151,7 +151,7 @@ def test_3d_view_smoke(qtbot):
 def test_menu_bar_is_inside_the_window(qtbot, window):
     assert not window.menuBar().isNativeMenuBar()
     titles = [a.text() for a in window.menuBar().actions()]
-    assert titles == ["&File", "&Design", "&Help"]
+    assert titles == ["&File", "&View", "&Design", "&Help"]
 
 
 def test_same_look_on_every_os(qtbot):
@@ -164,3 +164,20 @@ def test_same_look_on_every_os(qtbot):
     assert app.style().objectName().lower() == "fusion"
     assert app.palette().window().color().name() == "#f0f0f0"
     assert app.font().pixelSize() == 16
+
+
+def test_view_menu_switches_light_and_dark(qtbot, window):
+    from PySide6 import QtWidgets
+
+    titles = [a.text() for a in window.menuBar().actions()]
+    assert titles == ["&File", "&View", "&Design", "&Help"]
+    assert window.theme_actions["light"].isChecked()
+    assert calc(qtbot, window)
+    window.theme_actions["dark"].trigger()
+    app = QtWidgets.QApplication.instance()
+    assert window.theme == "dark"
+    assert app.palette().window().color().name() == "#2b2d31"
+    assert window.impedance_view.figure.get_facecolor()[:3] != (1.0, 1.0, 1.0)
+    assert window.impedance_view.figure.axes  # redrawn with the result
+    window.theme_actions["light"].trigger()
+    assert app.palette().window().color().name() == "#f0f0f0"

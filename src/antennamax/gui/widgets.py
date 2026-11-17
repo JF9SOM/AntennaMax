@@ -21,6 +21,7 @@ from antennamax.gui.state import (  # noqa: E402
     FormValues,
 )
 from antennamax.gui.summary import SWEEP_COLUMNS, center_summary, sweep_rows  # noqa: E402
+from antennamax.gui.theme import PLOT_COLORS, mpl_rc  # noqa: E402
 from antennamax.viz.data import DesignRun  # noqa: E402
 
 ERROR_STYLE = "color: #c0392b; font-size: 11px;"
@@ -334,6 +335,8 @@ class MplView(QtWidgets.QWidget):
         from matplotlib.figure import Figure
 
         self.draw_fn = draw_fn
+        self.theme = "light"
+        self._run: DesignRun | None = None
         self.figure = Figure(figsize=(7, 5))
         self.canvas = FigureCanvasQTAgg(self.figure)
         layout = QtWidgets.QVBoxLayout(self)
@@ -343,14 +346,28 @@ class MplView(QtWidgets.QWidget):
         self.clear()
 
     def clear(self) -> None:
+        self._run = None
         self.figure.clear()
+        self.figure.set_facecolor(PLOT_COLORS[self.theme][0])
         self.figure.text(0.5, 0.5, "Press Calculate", ha="center", va="center", color="gray")
         self.canvas.draw_idle()
 
     def show_run(self, run: DesignRun) -> None:
+        import matplotlib
+
+        self._run = run
         self.figure.clear()
-        self.draw_fn(run, self.figure)
+        with matplotlib.rc_context(mpl_rc(self.theme)):
+            self.figure.set_facecolor(PLOT_COLORS[self.theme][0])
+            self.draw_fn(run, self.figure)
         self.canvas.draw_idle()
+
+    def set_theme(self, theme: str) -> None:
+        self.theme = theme
+        if self._run is not None:
+            self.show_run(self._run)
+        else:
+            self.clear()
 
 
 class Scene3D(QtWidgets.QWidget):
@@ -363,6 +380,8 @@ class Scene3D(QtWidgets.QWidget):
     def __init__(self, enabled: bool = True, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.plotter: Any = None
+        self.theme = "light"
+        self._run: DesignRun | None = None
         self.message = ""
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -391,13 +410,25 @@ class Scene3D(QtWidgets.QWidget):
             return
         from antennamax.viz.view3d import populate_scene
 
+        self._run = run
+        background, text, _ = PLOT_COLORS[self.theme]
         self.plotter.clear()
+        self.plotter.set_background(background)
+        self.plotter.theme.font.color = text
         # The render window's size is in device pixels (twice the widget's on a retina screen).
         width, height = self.plotter.window_size
         ratio = float(self.devicePixelRatioF())
         size = (max(int(width), 400), max(int(height), 300))
         populate_scene(self.plotter, run, size, ratio)
         self.plotter.render()
+
+    def set_theme(self, theme: str) -> None:
+        self.theme = theme
+        if self.plotter is not None:
+            if self._run is not None:
+                self.show_run(self._run)
+            else:
+                self.plotter.set_background(PLOT_COLORS[theme][0])
 
     def close_plotter(self) -> None:
         if self.plotter is not None:
