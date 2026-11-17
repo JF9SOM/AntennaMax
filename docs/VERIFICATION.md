@@ -148,7 +148,8 @@
 - [ ] 基板データ出力の方式(Gerber 直接出力か DXF / KiCad 経由か)
 
 ### 依存・配布
-- [ ] PySide6 / pyvista の 3 OS 動作(CI で確認する)
+- [ ] PySide6 / pyvista の 3 OS 動作(offscreen の GUI テストは CI の gui ジョブで確認。対話的な 3D 表示は macOS でのみ手動確認、Linux / Windows は未確認)
+- [ ] 高 DPI 画面での 3D 凡例の位置(macOS retina で確認。他 OS は未確認)
 - [ ] OS 別インストーラーのサイズ(OCP + VTK + Qt)
 
 ## 検証済み

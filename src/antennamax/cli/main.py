@@ -65,6 +65,9 @@ def _build_parser() -> argparse.ArgumentParser:
     plot.add_argument("design", type=Path, help="path to design.yaml")
     plot.add_argument("--save", type=Path, help="write a PNG instead of opening a window")
 
+    gui = sub.add_parser("gui", help="open the graphical application")
+    gui.add_argument("design", type=Path, nargs="?", help="design.yaml to open (optional)")
+
     parts = sub.add_parser("parts", help="3D-printable parts (STL and STEP) for a design")
     parts.add_argument("design", type=Path, help="path to design.yaml")
     parts.add_argument("--out", type=Path, required=True, help="output directory")
@@ -307,6 +310,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _plot(args.design, args.save)
         if args.command == "parts":
             return _parts(args)
+        if args.command == "gui":
+            from antennamax.gui.app import run_gui
+
+            return run_gui(args.design)
     except (DesignError, SegmentationError, MissingExtraError) as exc:
         print(f"antennamax: error: {exc}", file=sys.stderr)
         return 2

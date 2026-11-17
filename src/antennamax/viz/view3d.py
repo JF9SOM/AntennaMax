@@ -26,21 +26,42 @@ PATTERN_OPACITY = 0.35  # low enough to see the wires and the feed point through
 PATTERN_SIZE_FRACTION = 0.8  # peak radius of the pattern relative to the structure size
 
 
-def _add_legend(plotter: Any, entries: list[tuple[str, str]], window_size) -> None:
-    """Coloured legend lines under the info text (pyvista's legend widget clips long labels)."""
-    top = window_size[1] - 75
+def _add_legend(
+    plotter: Any, entries: list[tuple[str, str]], window_size, pixel_ratio: float = 1.0
+) -> None:
+    """Coloured legend lines under the info text (pyvista's legend widget clips long labels).
+
+    `pixel_ratio` scales the pixel offsets on high-DPI screens (window_size is in device pixels).
+    """
+    top = window_size[1] - 75 * pixel_ratio
     for i, (label, color) in enumerate(entries):
-        plotter.add_text(f"-- {label}", position=(10, top - 18 * i), color=color, font_size=9)
+        plotter.add_text(
+            f"-- {label}",
+            position=(10 * pixel_ratio, top - 18 * pixel_ratio * i),
+            color=color,
+            font_size=9,
+        )
 
 
 def build_scene(run: DesignRun, off_screen: bool = False, window_size=(1000, 800)) -> Any:
     """Create a pyvista Plotter holding the scene (not shown yet)."""
     pv = require("pyvista", "open the 3D view", extra="gui")
+    plotter = pv.Plotter(off_screen=off_screen, window_size=list(window_size))
+    populate_scene(plotter, run, window_size)
+    return plotter
+
+
+def populate_scene(
+    plotter: Any, run: DesignRun, window_size=(1000, 800), pixel_ratio: float = 1.0
+) -> None:
+    """Draw the wires, the radiation pattern and the axes on a pyvista plotter.
+
+    Works on any plotter (a plain Plotter, or the interactor embedded in the GUI).
+    """
+    pv = require("pyvista", "open the 3D view", extra="gui")
     geometry = run.geometry
     size = geometry_size(geometry)
     center = geometry_center(geometry)
-
-    plotter = pv.Plotter(off_screen=off_screen, window_size=list(window_size))
 
     extended = bool(run.sweep_result.meta.get("extended_kernel"))
     draws, magnification = wire_draws(geometry, extended)
@@ -91,9 +112,8 @@ def build_scene(run: DesignRun, off_screen: bool = False, window_size=(1000, 800
         f"delta/a = segment length / radius: {rule}",
         font_size=9,
     )
-    _add_legend(plotter, legend_entries(draws, extended), window_size)
+    _add_legend(plotter, legend_entries(draws, extended), window_size, pixel_ratio)
     plotter.view_isometric()
-    return plotter
 
 
 def show(run: DesignRun, screenshot: Path | None = None) -> None:

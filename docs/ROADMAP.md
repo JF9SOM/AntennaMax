@@ -2,7 +2,17 @@
 
 各フェーズは「完了条件」をすべて満たしてから次へ進む。
 
-## P0: 基盤 + NEC2 バックエンド(現在)
+## GUI アプリ(最優先で開発中)
+
+- [x] `antennamax gui`: テンプレート選択、パラメータ自動生成フォーム、yagi 要素表、掃引・パターン分解能
+- [x] 3D 表示 / SWR・R/X / パターン / 結果の要約 / 警告の各タブ、バックグラウンド計算
+- [x] design.yaml の開く・保存、結果 JSON、QFH の parts 出力
+- [x] offscreen の GUI テスト(pytest-qt)と CI の gui ジョブ
+- [ ] Smith チャート、他テンプレート(magloop 等)対応、最適化の GUI 化
+
+詳細は `docs/GUI.md`。
+
+## P0: 基盤 + NEC2 バックエンド
 
 - [ ] プロジェクト雛形(uv, pyproject.toml, ruff, pytest, .gitattributes)
 - [ ] CI: Linux / Windows / macOS × Python 3.11 / 3.13
@@ -53,7 +63,7 @@
 
 ## P4: GUI + 最適化 + 配布
 
-- [ ] PySide6 + pyvistaqt による GUI(寸法編集、3D 表示、パターン、Smith チャート)
+- [x] PySide6 + pyvistaqt による GUI の基本部分(上の「GUI アプリ」を参照。Smith チャートは未着手)
 - [ ] 最適化(scipy / optuna)
 - [ ] PyInstaller / Briefcase による OS 別インストーラー
 

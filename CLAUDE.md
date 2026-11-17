@@ -31,7 +31,7 @@ MMANA に代わる、現代的な Python スタックによるアマチュア無
 | 3D CAD | build123d (OCP) | extras `cad` |
 | プロット | matplotlib | extras `plot`(`gui` にも含む)。`antennamax plot` |
 | 3D 表示 | pyvista | extras `gui`。`antennamax view`(確認用表示) |
-| GUI | PySide6 + pyvistaqt | extras `gui`。GUI アプリは P4 まで着手しない |
+| GUI | PySide6 + pyvistaqt | extras `gui`。GUI アプリ(`antennamax gui`)を最優先で開発中 |
 | 最適化 | scipy.optimize(必要なら optuna) | |
 | テスト / Lint | pytest, ruff | |
 
@@ -49,7 +49,7 @@ src/antennamax/
   optimize/
   cli/
   viz/         描画データ生成(NumPy のみ), view(pyvista)/plot(matplotlib)
-  gui/         (P4)
+  gui/         GUI アプリ(PySide6)。計算ロジックは持たず既存コードを呼ぶだけ
 designs/       コミュニティ設計の蓄積(design.yaml が唯一のソース)
 tests/
 docs/
@@ -120,7 +120,9 @@ uv run antennamax --help          # CLI
 
 ## 現在のフェーズ
 
-**P0**(`docs/ROADMAP.md` 参照)。確認用表示(view/plot)は実装済み。PySide6 の GUI アプリ・openEMS・PO には着手しない(GUI アプリは P4)。
+**GUI アプリを最優先で開発中**(`docs/GUI.md`、`docs/ROADMAP.md` 参照)。基盤(P0)・確認用表示(view/plot)・QFH の製作キットは実装済み。
+GUI は dipole / yagi / qfh の設計・計算・結果表示・保存を備える。計算は既存コードを呼ぶだけで、GUI 側に再実装しない。
+openEMS・PO には着手しない。新しい部品は作らない。
 
 ## ライセンス
 

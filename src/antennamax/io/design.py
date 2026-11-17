@@ -25,7 +25,16 @@ TEMPLATES: dict[str, type[Template]] = {"dipole": Dipole, "yagi": Yagi, "qfh": Q
 
 
 class DesignError(ValueError):
-    """The design file is unreadable or invalid; the message is meant for the user."""
+    """The design file is unreadable or invalid; the message is meant for the user.
+
+    `errors` lists the individual problems as (location, message) pairs where the location is a
+    tuple such as ("params", "diameter_m") or ("sweep", "points"); empty for problems that have no
+    location (unreadable file, broken YAML).
+    """
+
+    def __init__(self, message: str, errors: list[tuple[tuple, str]] | None = None) -> None:
+        super().__init__(message)
+        self.errors: list[tuple[tuple, str]] = errors or []
 
 
 class SweepSpec(SIModel):
@@ -74,6 +83,13 @@ class LoadedDesign:
     pattern_resolution_deg: float | None
 
 
+def _located_errors(exc: ValidationError, prefix: str = "") -> list[tuple[tuple, str]]:
+    return [
+        ((*([prefix] if prefix else []), *err["loc"]), err["msg"].removeprefix("Value error, "))
+        for err in exc.errors()
+    ]
+
+
 def _format_errors(exc: ValidationError, prefix: str = "") -> str:
     lines = []
     for err in exc.errors():
@@ -95,13 +111,24 @@ def load_design(path: str | Path) -> LoadedDesign:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise DesignError(f"{path}: invalid YAML: {exc}") from exc
+    return parse_design(data, source=str(path))
+
+
+def parse_design(data: Any, source: str = "<design>") -> LoadedDesign:
+    """Validate a design mapping (the content of a design.yaml) and build the design.
+
+    Raises DesignError; its `errors` give the located problems (used by the GUI to show a message
+    next to the offending field).
+    """
     if not isinstance(data, dict):
-        raise DesignError(f"{path}: the top level must be a mapping (template, params, sweep)")
+        raise DesignError(f"{source}: the top level must be a mapping (template, params, sweep)")
 
     try:
         spec = DesignFile.model_validate(data)
     except ValidationError as exc:
-        raise DesignError(f"{path}: invalid design:\n{_format_errors(exc)}") from exc
+        raise DesignError(
+            f"{source}: invalid design:\n{_format_errors(exc)}", _located_errors(exc)
+        ) from exc
 
     template_cls = TEMPLATES[spec.template]
     params = dict(spec.params)
@@ -117,8 +144,9 @@ def load_design(path: str | Path) -> LoadedDesign:
         template = template_cls.model_validate(params)
     except ValidationError as exc:
         raise DesignError(
-            f"{path}: invalid params for template {spec.template!r}:\n"
-            f"{_format_errors(exc, 'params')}"
+            f"{source}: invalid params for template {spec.template!r}:\n"
+            f"{_format_errors(exc, 'params')}",
+            _located_errors(exc, "params"),
         ) from exc
 
     freqs = np.linspace(spec.sweep.start_hz, spec.sweep.stop_hz, spec.sweep.points)
