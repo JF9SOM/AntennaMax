@@ -37,10 +37,12 @@ def run_gui(design_path: Path | None = None) -> int:
         return 2
     from PySide6 import QtWidgets
 
+    from antennamax.gui.theme import apply_look
     from antennamax.gui.window import MainWindow
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv[:1])
     app.setApplicationName("AntennaMax")
+    apply_look(app)
     icon = window_icon()
     if icon is not None:
         app.setWindowIcon(icon)

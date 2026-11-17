@@ -18,6 +18,10 @@ uv run antennamax gui examples/yagi3_144mhz.yaml   # 設計ファイルを開い
   Summary(Z、SWR、最大利得、F/B、天頂の軸比、RHCP/LHCP)、Warnings
 - File メニュー: 設計ファイルを開く・保存、結果の JSON 出力、QFH の parts 出力(STL/STEP。`cad` extra が必要)
 
+見た目は全 OS で揃える(`gui/theme.py`): Fusion スタイル、固定の明るいパレット、フォントサイズ 10 pt。
+メニューバーは macOS でもウィンドウの中に表示する(OS 共通のメニューバーは使わない)。
+フォントの種類だけは OS 既定のまま(OS ごとに多少異なる)。
+
 不正な入力は該当欄の下に赤字で表示され、計算は始まらない。
 
 ## 構成

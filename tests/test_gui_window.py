@@ -146,3 +146,21 @@ def test_3d_view_smoke(qtbot):
     assert w.scene.available
     w.scene.close_plotter()
     w.calculator.close()
+
+
+def test_menu_bar_is_inside_the_window(qtbot, window):
+    assert not window.menuBar().isNativeMenuBar()
+    titles = [a.text() for a in window.menuBar().actions()]
+    assert titles == ["&File", "&Design", "&Help"]
+
+
+def test_same_look_on_every_os(qtbot):
+    from PySide6 import QtWidgets
+
+    from antennamax.gui.theme import apply_look
+
+    app = QtWidgets.QApplication.instance()
+    apply_look(app)
+    assert app.style().objectName().lower() == "fusion"
+    assert app.palette().window().color().name() == "#f0f0f0"
+    assert app.font().pointSize() == 10

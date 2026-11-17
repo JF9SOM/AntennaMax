@@ -160,6 +160,8 @@ class MainWindow(QtWidgets.QMainWindow):
     # --- menus ------------------------------------------------------------------------------
 
     def _build_menus(self) -> None:
+        # The menu bar stays inside the window on every OS (no macOS global menu bar).
+        self.menuBar().setNativeMenuBar(False)
         file_menu = self.menuBar().addMenu("&File")
         self.open_action = file_menu.addAction("&Open design.yaml…", self._choose_open)
         self.open_action.setShortcut(QtGui.QKeySequence.Open)
