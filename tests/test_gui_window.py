@@ -151,7 +151,7 @@ def test_3d_view_smoke(qtbot):
 def test_menu_bar_is_inside_the_window(qtbot, window):
     assert not window.menuBar().isNativeMenuBar()
     titles = [a.text() for a in window.menuBar().actions()]
-    assert titles == ["&File", "&View", "&Design", "&Help"]
+    assert titles == ["&File", "&Design", "&View", "&Help"]
 
 
 def test_same_look_on_every_os(qtbot):
@@ -170,7 +170,7 @@ def test_view_menu_switches_light_and_dark(qtbot, window):
     from PySide6 import QtWidgets
 
     titles = [a.text() for a in window.menuBar().actions()]
-    assert titles == ["&File", "&View", "&Design", "&Help"]
+    assert titles == ["&File", "&Design", "&View", "&Help"]
     assert window.theme_actions["light"].isChecked()
     assert calc(qtbot, window)
     window.theme_actions["dark"].trigger()

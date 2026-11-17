@@ -180,6 +180,9 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         file_menu.addSeparator()
         file_menu.addAction("&Quit", self.close).setShortcut(QtGui.QKeySequence.Quit)
+        design_menu = self.menuBar().addMenu("&Design")
+        calc = design_menu.addAction("&Calculate", self.calculate)
+        calc.setShortcut(QtGui.QKeySequence("F5"))
         view_menu = self.menuBar().addMenu("&View")
         group = QtGui.QActionGroup(self)
         self.theme_actions: dict[str, QtGui.QAction] = {}
@@ -189,9 +192,6 @@ class MainWindow(QtWidgets.QMainWindow):
             action.setChecked(name == self.theme)
             group.addAction(action)
             self.theme_actions[name] = action
-        design_menu = self.menuBar().addMenu("&Design")
-        calc = design_menu.addAction("&Calculate", self.calculate)
-        calc.setShortcut(QtGui.QKeySequence("F5"))
         help_menu = self.menuBar().addMenu("&Help")
         help_menu.addAction("&About", self._about)
         self._update_menu_state()
