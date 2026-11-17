@@ -45,6 +45,6 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install
-        run: uv sync --extra dev --extra rf --extra plot --extra cad --extra gui
+        run: uv sync --extra dev --extra rf --extra plot --extra cad --extra gui --extra gui-test
       - name: GUI tests
         run: uv run pytest tests/test_gui_state.py tests/test_gui_window.py -v

@@ -44,6 +44,7 @@ GUI 側には再実装しない。PyNEC は GIL を解放しないため、計�
 ## テスト
 
 ```bash
+uv sync --extra dev --extra gui --extra gui-test
 uv run pytest tests/test_gui_state.py tests/test_gui_window.py   # offscreen で動く
 ```
 

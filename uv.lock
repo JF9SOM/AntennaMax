@@ -42,7 +42,6 @@ cad = [
 ]
 dev = [
     { name = "pytest" },
-    { name = "pytest-qt" },
     { name = "ruff" },
 ]
 gui = [
@@ -50,6 +49,9 @@ gui = [
     { name = "pyside6" },
     { name = "pyvista" },
     { name = "pyvistaqt" },
+]
+gui-test = [
+    { name = "pytest-qt" },
 ]
 plot = [
     { name = "matplotlib" },
@@ -68,7 +70,7 @@ requires-dist = [
     { name = "pynec", specifier = ">=2.4" },
     { name = "pyside6", marker = "extra == 'gui'", specifier = ">=6.6" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
-    { name = "pytest-qt", marker = "extra == 'dev'", specifier = ">=4.4" },
+    { name = "pytest-qt", marker = "extra == 'gui-test'", specifier = ">=4.4" },
     { name = "pyvista", marker = "extra == 'gui'", specifier = ">=0.43" },
     { name = "pyvistaqt", marker = "extra == 'gui'", specifier = ">=0.11" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -76,7 +78,7 @@ requires-dist = [
     { name = "scikit-rf", marker = "extra == 'rf'", specifier = ">=1.0" },
     { name = "scipy", specifier = ">=1.11" },
 ]
-provides-extras = ["rf", "cad", "plot", "gui", "dev"]
+provides-extras = ["rf", "cad", "plot", "gui", "dev", "gui-test"]
 
 [[package]]
 name = "anytree"
