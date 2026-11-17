@@ -20,6 +20,7 @@ from antennamax.mech.qfh_parts import (
     QfhLowerSpreader,
     QfhPartSet,
     QfhUpperSpreader,
+    part_rows,
 )
 from antennamax.templates.qfh import Qfh
 
@@ -37,6 +38,20 @@ def parts(f_mhz: float = 435.0, **overrides) -> QfhPartSet:
 
 def need_cad():
     return pytest.importorskip("build123d")
+
+
+def parse_listing(out: str) -> list[tuple[str, str, int, float]]:
+    """(part, site, quantity, distance from top [mm]) for every row of the printed table."""
+    rows = []
+    for line in out.splitlines():
+        fields = line.split()
+        if (
+            len(fields) >= 5
+            and fields[1] in ("upper", "lower_large", "lower_small")
+            and fields[2].isdigit()
+        ):
+            rows.append((fields[0], fields[1], int(fields[2]), float(fields[3])))
+    return rows
 
 
 # --- derived dimensions (no CAD needed) ------------------------------------------------------
@@ -379,10 +394,9 @@ def test_cli_parts_435mhz_lists_parts_without_warnings(tmp_path, capsys):
         assert (out / f"{name}.stl").exists() and (out / f"{name}.step").exists()
     assert "16 x M3 screws" in captured.out and "16 x M3 hex nuts" in captured.out
     assert "From top[mm]" in captured.out
-    line = next(ln for ln in captured.out.splitlines() if ln.startswith("qfh_lower_spreader_large"))
-    assert line.split()[1] == "1" and float(line.split()[2]) == pytest.approx(229.8, abs=0.1)
-    clamp_line = next(ln for ln in captured.out.splitlines() if ln.startswith("qfh_clamp_large"))
-    assert clamp_line.split()[1] == "4"
+    rows = parse_listing(captured.out)
+    assert ("qfh_lower_spreader_large", "lower_large", 1, 229.8) in rows
+    assert sum(q for n, _, q, _ in rows if n == "qfh_clamp_large") == 4
     for stl in out.glob("*.stl"):
         assert is_watertight(read_binary_stl(stl)), stl.name
 
@@ -456,3 +470,107 @@ def test_part_classes_are_exported():
         qfh().dimensions.small.height_m
     )
     assert QfhClamp(qfh=qfh(), loop="large").part_name == "qfh_clamp_large"
+
+
+# --- the listing: one row per kind and installation site -----------------------------------------
+
+
+def test_listing_rows_of_the_integrated_set_follow_h1_h2():
+    s = parts(435.0)
+    dims = s.qfh.dimensions
+    h1, h2 = dims.large.height_m, dims.small.height_m
+    rows = [(r.name, r.site, r.count, r.distance_from_top_m) for r in part_rows_of(s)]
+    assert rows == [
+        ("qfh_upper_spreader", "upper", 1, 0.0),
+        ("qfh_lower_spreader_large", "lower_large", 1, pytest.approx(h1)),
+        ("qfh_lower_spreader_small", "lower_small", 1, pytest.approx(h2)),
+        (
+            "qfh_clamp_large",
+            "upper",
+            2,
+            0.0,
+        ),  # the large loop's clamps: two on the top spreader ...
+        ("qfh_clamp_large", "lower_large", 2, pytest.approx(h1)),  # ... two on the lower bar
+        ("qfh_clamp_small", "upper", 2, 0.0),
+        ("qfh_clamp_small", "lower_small", 2, pytest.approx(h2)),
+    ]
+
+
+def part_rows_of(s):
+    need_cad()
+    return part_rows(s)
+
+
+def test_listing_totals_match_the_part_list_and_the_fasteners():
+    s = parts(435.0)
+    rows = part_rows_of(s)
+    for instance in s.instances():
+        assert sum(r.count for r in rows if r.name == instance.name) == instance.count
+    assert sum(r.count for r in rows) == 11
+    assert s.screw_count == s.nut_count == 16  # unchanged by how the rows are grouped
+
+
+def test_cli_listing_shows_the_sites_and_heights_of_the_integrated_parts(tmp_path, capsys):
+    need_cad()
+    assert main(["parts", str(EXAMPLES / "qfh_435mhz.yaml"), "--out", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    dims = qfh(435.0).dimensions
+    h1, h2 = round(to_mm(dims.large.height_m), 1), round(to_mm(dims.small.height_m), 1)
+    assert parse_listing(out) == [
+        ("qfh_upper_spreader", "upper", 1, 0.0),
+        ("qfh_lower_spreader_large", "lower_large", 1, h1),
+        ("qfh_lower_spreader_small", "lower_small", 1, h2),
+        ("qfh_clamp_large", "upper", 2, 0.0),
+        ("qfh_clamp_large", "lower_large", 2, h1),
+        ("qfh_clamp_small", "upper", 2, 0.0),
+        ("qfh_clamp_small", "lower_small", 2, h2),
+    ]
+    assert "Printed parts: 11 pieces" in out
+    assert "-0.0" not in out
+
+
+# --- sign of the distance from the top -----------------------------------------------------------
+
+
+def test_listing_distance_never_shows_negative_zero_but_keeps_real_negatives():
+    from antennamax.cli.main import _distance_mm
+
+    def shown(distance_m):
+        return f"{_distance_mm(distance_m):.1f}"
+
+    assert shown(0.0) == "0.0" and shown(-0.0) == "0.0"
+    assert shown(-1e-9) == "0.0" and shown(-0.00004) == "0.0"  # rounds to a negative zero
+    assert shown(0.7266) == "726.6"
+    assert shown(-0.0125) == "-12.5"  # above the top: stays negative
+    assert shown(-0.0004) == "-0.4"
+
+
+def test_placement_above_the_top_has_a_negative_distance():
+    from antennamax.mech.qfh_parts import Placement
+
+    above = Placement("x", QfhUpperSpreader(qfh=qfh()), (0.0, 0.0, 12.5), 0.0, "upper")
+    below = Placement("x", QfhUpperSpreader(qfh=qfh()), (0.0, 0.0, -229.8), 0.0, "lower_large")
+    assert above.distance_from_top_m == pytest.approx(-0.0125)
+    assert below.distance_from_top_m == pytest.approx(0.2298)
+
+
+def test_cli_listing_prints_a_part_above_the_top_with_a_minus_sign(monkeypatch, tmp_path, capsys):
+    need_cad()
+    from antennamax.mech import qfh_parts
+    from antennamax.mech.qfh_parts import PartRow
+
+    size = (10.0, 10.0, 5.0)
+    rows = [
+        PartRow("qfh_upper_spreader", "upper", 1, -0.0125, size),  # 12.5 mm above the top
+        PartRow("qfh_clamp_large", "upper", 2, -0.00004, size),  # rounds to -0.0
+        PartRow("qfh_clamp_small", "lower_small", 2, 0.2185, size),
+    ]
+    monkeypatch.setattr(qfh_parts, "part_rows", lambda part_set: rows)
+    assert main(["parts", str(EXAMPLES / "qfh_435mhz.yaml"), "--out", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert parse_listing(out) == [
+        ("qfh_upper_spreader", "upper", 1, -12.5),
+        ("qfh_clamp_large", "upper", 2, 0.0),
+        ("qfh_clamp_small", "lower_small", 2, 218.5),
+    ]
+    assert "-12.5" in out and "-0.0" not in out

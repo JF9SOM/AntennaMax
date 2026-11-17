@@ -37,7 +37,7 @@ from typing import Any, Literal
 
 from pydantic import PositiveFloat, model_validator
 
-from antennamax.mech.base import FitProblem, Part, require_cad, to_mm
+from antennamax.mech.base import MM, FitProblem, Part, require_cad, to_mm
 from antennamax.mech.fasteners import Fastener, standard_screw_length_mm
 from antennamax.templates.base import SIModel
 from antennamax.templates.qfh import Qfh
@@ -319,6 +319,37 @@ class FastenerUse:
         return standard_screw_length_mm(to_mm(self.min_length_m))
 
 
+SITE_ORDER = ("upper", "lower_large", "lower_small")
+
+
+@dataclass(frozen=True)
+class PartRow:
+    """Parts of one kind installed at one place: for the listing."""
+
+    name: str
+    site: str
+    count: int
+    distance_from_top_m: float
+    size_mm: tuple[float, float, float]
+
+
+def part_rows(part_set: Any) -> list[PartRow]:
+    """The printed parts grouped by kind and installation site, from the placements.
+
+    A kind that is installed at several heights (clamp plates and fixtures sit at the top and on
+    both lower bars) gets one row per site, with that site's distance from the top.
+    """
+    instances = part_set.instances()
+    sizes = {i.name: i.part.size_mm() for i in instances}
+    order = {i.name: n for n, i in enumerate(instances)}
+    groups: dict[tuple[str, str], list[Any]] = {}
+    for p in part_set.placements():
+        entry = groups.setdefault((p.name, p.site), [0, p.distance_from_top_m])
+        entry[0] += 1
+    keys = sorted(groups, key=lambda k: (order[k[0]], SITE_ORDER.index(k[1])))
+    return [PartRow(n, s, groups[(n, s)][0], groups[(n, s)][1], sizes[n]) for n, s in keys]
+
+
 @dataclass(frozen=True)
 class PartInstance:
     name: str
@@ -338,6 +369,13 @@ class Placement:
     part: Part
     position_mm: tuple[float, float, float]
     rotation_deg: float  # about z
+    site: str = ""  # where it is installed: "upper", "lower_large" or "lower_small"
+
+    @property
+    def distance_from_top_m(self) -> float:
+        """How far below the top of the antenna the part's conductor plane lies; negative for a
+        part placed above the top."""
+        return -self.position_mm[2] / MM
 
 
 class QfhPartSet(QfhHolderPart):
@@ -378,27 +416,35 @@ class QfhPartSet(QfhHolderPart):
         """Where every physical part sits when the antenna is assembled."""
         out: list[Placement] = []
         upper, lower_l, lower_s = self.upper(), self.lower("large"), self.lower("small")
-        out.append(Placement(upper.part_name, upper, (0.0, 0.0, 0.0), 0.0))
+        out.append(Placement(upper.part_name, upper, (0.0, 0.0, 0.0), 0.0, "upper"))
         out.append(
             Placement(
-                lower_l.part_name, lower_l, (0.0, 0.0, -to_mm(lower_l.distance_from_top_m)), 0.0
+                lower_l.part_name,
+                lower_l,
+                (0.0, 0.0, -to_mm(lower_l.distance_from_top_m)),
+                0.0,
+                "lower_large",
             )
         )
         out.append(
             Placement(
-                lower_s.part_name, lower_s, (0.0, 0.0, -to_mm(lower_s.distance_from_top_m)), 90.0
+                lower_s.part_name,
+                lower_s,
+                (0.0, 0.0, -to_mm(lower_s.distance_from_top_m)),
+                90.0,
+                "lower_small",
             )
         )
         large, small = self.clamp("large"), self.clamp("small")
         cl, cs = to_mm(large.clamp_center_m("large")), to_mm(small.clamp_center_m("small"))
         z_lower_large = -to_mm(lower_l.distance_from_top_m)
         z_lower_small = -to_mm(lower_s.distance_from_top_m)
-        for z in (0.0, z_lower_large):  # the large loop's clamps: upper arms and lower bar
+        for site, z in (("upper", 0.0), ("lower_large", z_lower_large)):
+            for sign in (1.0, -1.0):  # the large loop's clamps: upper arms and lower bar
+                out.append(Placement(large.part_name, large, (sign * cl, 0.0, z), 0.0, site))
+        for site, z in (("upper", 0.0), ("lower_small", z_lower_small)):
             for sign in (1.0, -1.0):
-                out.append(Placement(large.part_name, large, (sign * cl, 0.0, z), 0.0))
-        for z in (0.0, z_lower_small):
-            for sign in (1.0, -1.0):
-                out.append(Placement(small.part_name, small, (0.0, sign * cs, z), 90.0))
+                out.append(Placement(small.part_name, small, (0.0, sign * cs, z), 90.0, site))
         return out
 
     def rods(self) -> list[Rod]:

@@ -183,10 +183,18 @@ def _eprint(message: str) -> None:
         print(message.encode("ascii", "replace").decode("ascii"), file=sys.stderr)
 
 
+def _distance_mm(distance_m: float) -> float:
+    """Distance for display, in mm to one decimal: a tiny or zero value shows as 0.0, never -0.0
+    (round() keeps the sign of a negative zero; adding 0.0 clears it). Negative distances, for
+    parts above the top, stay negative."""
+    return round(distance_m * 1000.0, 1) + 0.0
+
+
 def _parts(args: argparse.Namespace) -> int:
     from pydantic import ValidationError
 
     from antennamax.mech.base import require_cad, to_mm
+    from antennamax.mech.qfh_parts import part_rows
     from antennamax.mech.qfh_support import plan_supports
 
     design = load_design(args.design)
@@ -228,10 +236,17 @@ def _parts(args: argparse.Namespace) -> int:
         _eprint(f"antennamax: warning: {problem.message()}")
 
     print(f"Support: {plan.mode} ({plan.reason})")
-    print(f"{'Part':<26} {'Qty':>3} {'From top[mm]':>13}   Size x y z [mm]")
-    for instance, (x, y, z) in rows:
-        top = to_mm(instance.distance_from_top_m)
-        print(f"{instance.name:<26} {instance.count:>3} {top:>13.1f}   {x:.1f} x {y:.1f} x {z:.1f}")
+    print(f"{'Part':<26} {'Site':<12} {'Qty':>3} {'From top[mm]':>13}   Size x y z [mm]")
+    pieces = 0
+    for row in part_rows(part_set):
+        x, y, z = row.size_mm
+        top = _distance_mm(row.distance_from_top_m)
+        print(
+            f"{row.name:<26} {row.site:<12} {row.count:>3} {top:>13.1f}   "
+            f"{x:.1f} x {y:.1f} x {z:.1f}"
+        )
+        pieces += row.count
+    print(f"Printed parts: {pieces} pieces")
     rods = part_set.rods()
     if rods:
         print(f"Rods (not printed, {to_mm(rods[0].diameter_m):g} mm diameter):")
